@@ -26,15 +26,18 @@ RUN /bin/bash /collect-runtime.sh
 
 FROM scratch
 LABEL org.opencontainers.image.title="Origin" \
-      org.opencontainers.image.version="0.5.1" \
-      org.opencontainers.image.description="Origin image hosting with persistent configuration and MySQL backup client"
+      org.opencontainers.image.version="0.5.2" \
+      org.opencontainers.image.description="Origin self-hosted image hosting (Go + MySQL)" \
+      org.opencontainers.image.source="https://github.com/SileyOf/orimg" \
+      org.opencontainers.image.licenses="AGPL-3.0-only"
 COPY --from=client /runtime/ /
 COPY --from=build /out/zhuapic /app/zhuapic
 COPY static/ /app/static/
 WORKDIR /app
-ENV PORT=8080 INSTALL_CONFIG=/app/data/installation.json \
-    UPLOAD_DIR=/app/data/uploads CACHE_DIR=/app/data/cache ASSET_DIR=/app/data/site-assets \
-    PATH=/usr/bin:/app TZ=Asia/Shanghai
+# Data paths use the application defaults (data/... relative to /app), which
+# resolve to the /app/data volume. They are deliberately not set here so that a
+# mounted legacy .env can still override them exactly as on a binary install.
+ENV PORT=8080 PATH=/usr/bin:/app TZ=Asia/Shanghai
 USER 10001:10001
 VOLUME ["/app/data"]
 EXPOSE 8080

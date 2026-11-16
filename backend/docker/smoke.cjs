@@ -7,12 +7,12 @@ const { execFileSync, spawnSync } = require('node:child_process');
 (async () => {
   const root = path.resolve(__dirname, '..');
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'origin-docker-qa-'));
-  const id = `origin-051-qa-${process.pid}`;
+  const id = `origin-052-qa-${process.pid}`;
   const resources = { containers: [], volumes: [], network: false };
   const docker = (...args) => execFileSync('docker', args, { encoding: 'utf8', maxBuffer: 16 << 20, timeout: 180000 });
   const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
   const password = 'isolated-docker-fixture-password';
-  const image = process.env.ORIGIN_QA_IMAGE || 'origin:0.5.1';
+  const image = process.env.ORIGIN_QA_IMAGE || 'yuki955/orimg:0.5.2';
   const go = process.env.GO_BIN || 'go';
   const sql = query => docker('exec', '-e', `MYSQL_PWD=${password}`, `${id}-db`, 'mysql', '-uroot', '-Nse', query);
   async function wait(check) {
@@ -51,7 +51,7 @@ const { execFileSync, spawnSync } = require('node:child_process');
       };
       launch();
       await wait(() => docker('exec', name, '/app/zhuapic', '-healthcheck'));
-      assert.equal(docker('exec', name, '/app/zhuapic', '-version').trim(), 'v0.5.1');
+      assert.equal(docker('exec', name, '/app/zhuapic', '-version').trim(), 'v0.5.2');
       assert.equal(JSON.parse(docker('inspect', name))[0].Config.User, '10001:10001');
       const logResult = spawnSync('docker', ['logs', name], { encoding: 'utf8' });
       assert.equal(logResult.status, 0);
@@ -93,6 +93,48 @@ const { execFileSync, spawnSync } = require('node:child_process');
       api('GET', imagePath);
       api('GET', '/install', null, null, 404);
       console.log(`${arch}: install, login, upload, original image, thumbnail, settings refresh, mysqldump, graceful stop and container recreation passed`);
+    }
+    // Binary-style site moved into the container: the original .env is mounted
+    // read-only as /app/.env and parsed by the application itself.
+    {
+      const arch = process.arch === 'arm64' ? 'arm64' : 'amd64';
+      const name = `${id}-legacy`, volume = `${name}-data`, probe = path.join(temp, 'probe-legacy');
+      execFileSync(go, ['build', '-trimpath', '-o', probe, './docker/probe'], {
+        cwd: root, env: { ...process.env, GOTOOLCHAIN: 'local', GOPROXY: 'off', CGO_ENABLED: '0', GOOS: 'linux', GOARCH: arch }, stdio: 'inherit'
+      });
+      const dbname = 'origin_legacy', dbpass = 'legacy$HOME-pa$$word_42';
+      sql(`CREATE DATABASE ${dbname}; CREATE USER 'legacy'@'%' IDENTIFIED BY '${dbpass}'; GRANT ALL ON ${dbname}.* TO 'legacy'@'%'`);
+      const envFile = path.join(temp, 'legacy.env');
+      await fs.writeFile(envFile, ['# copied unchanged from the binary site', 'DB_HOST=db', 'DB_PORT=3306', 'DB_USER=legacy',
+        `DB_PASSWORD="${dbpass}"`, `DB_NAME=${dbname}`, 'DB_TLS=disabled', `JWT_SECRET=${'legacy-signing-key-'.repeat(3)}`,
+        'BASE_URL=http://localhost:8080', 'ADMIN_USERNAME=owner', 'ADMIN_EMAIL=owner@example.test', `ADMIN_PASSWORD=${password}`,
+        'UPLOAD_DIR=data/legacy-uploads', 'PORT=9999', ''].join('\n'), { mode: 0o644 });
+      await fs.chmod(envFile, 0o644);
+      docker('volume', 'create', volume); resources.volumes.push(volume);
+      docker('run', '-d', '--name', name, '--platform', `linux/${arch}`, '--network', id, '--read-only',
+        '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges:true', '--tmpfs', '/tmp:rw,noexec,nosuid,size=64m',
+        '--mount', `type=volume,source=${volume},target=/app/data`, '--mount', `type=bind,source=${envFile},target=/app/.env,readonly`,
+        '--mount', `type=bind,source=${probe},target=/qa/probe,readonly`,
+        '-e', 'PORT=8080', '-e', 'DISABLE_BACKGROUND_WORK=true', image);
+      resources.containers.push(name);
+      const api = (method, url, body, token, expected = 200, upload = false) => {
+        const r = JSON.parse(execFileSync('docker', ['exec', '-i', name, '/qa/probe'], {
+          input: JSON.stringify({ Method: method, Path: url, Body: body, Token: token, Upload: upload }), encoding: 'utf8', timeout: 45000 }));
+        assert.equal(r.status, expected, `${method} ${url}: ${r.body}`);
+        try { return JSON.parse(r.body); } catch { return r.body; }
+      };
+      await wait(() => api('GET', '/api/ready'));
+      api('GET', '/install', null, null, 404);
+      const captcha = api('GET', '/api/auth/captcha');
+      const operands = captcha.question.match(/\d+/g).map(Number);
+      const login = api('POST', '/api/auth/login', { email: 'owner@example.test', password,
+        captcha_token: captcha.token, captcha_answer: String(operands[0] + operands[1]) });
+      const uploaded = api('POST', '/api/upload', null, login.token, 200, true);
+      api('GET', new URL(uploaded.url).pathname);
+      const listing = docker('run', '--rm', '--entrypoint', 'sh', '--mount', `type=volume,source=${volume},target=/d,readonly`,
+        'mysql:8.4', '-c', 'find /d -name "*.png" -path "*legacy-uploads*"');
+      assert.ok(listing.trim(), 'UPLOAD_DIR from the mounted .env was not used');
+      console.log('legacy: mounted .env ($ in password, custom UPLOAD_DIR, PORT override), bootstrap, login and upload passed');
     }
   } finally {
     for (const name of resources.containers.reverse()) { try { docker('rm', '-f', name); } catch {} }

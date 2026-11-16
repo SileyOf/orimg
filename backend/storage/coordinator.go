@@ -440,7 +440,7 @@ func (c *Coordinator) runDatabaseBackup(ctx context.Context, target string, jobI
 		return "", 0, err
 	}
 	dumpPath := utils.GetSetting(c.db, "mysqldump_path", "mysqldump")
-	resolved, err := exec.LookPath(dumpPath)
+	resolved, err := resolveMysqldump(dumpPath)
 	if err != nil {
 		return "", 0, errors.New("mysqldump was not found")
 	}
@@ -877,4 +877,16 @@ func boolSetting(raw string, fallback bool) bool {
 		return fallback
 	}
 	return parsed
+}
+
+// resolveMysqldump honours the configured path, but falls back to the
+// mysqldump on PATH when it is missing. Sites moved from a host install into
+// the container keep a host path (for example a panel's MySQL directory)
+// that does not exist inside the image.
+func resolveMysqldump(configured string) (string, error) {
+	resolved, err := exec.LookPath(configured)
+	if err == nil || configured == "mysqldump" {
+		return resolved, err
+	}
+	return exec.LookPath("mysqldump")
 }

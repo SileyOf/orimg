@@ -1,17 +1,34 @@
 # Origin
 
-Origin（起源图床）v0.5.1，基于 Go + MySQL，当前站点品牌为 Origin。支持命名存储、多地副本、相册、用户组及邮件账号流程。首版 Docker 提供 x86_64 / ARM64 离线部署包；公共镜像仓库尚未发布。
+Origin（起源图床）是一个自托管图床，基于 Go + MySQL，前端无需构建。支持命名存储（本地 / NAS / S3 兼容）、多地副本、相册、用户组与配额、邮件注册和找回密码。
 
-Docker 部署、旧站点迁入和持久化说明见 [Docker 指南](backend/docs/DOCKER.md)。
+[![Docker Hub](https://img.shields.io/docker/v/yuki955/orimg?sort=semver&label=docker)](https://hub.docker.com/r/yuki955/orimg)
+[![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
+
+当前版本 v0.5.2，变更见 [Changelog](CHANGELOG.md)。1.0 之前接口和部署方式仍可能调整。
+
+## 快速开始（Docker）
+
+```sh
+mkdir origin && cd origin
+curl -fsSLO https://raw.githubusercontent.com/SileyOf/orimg/main/backend/docker/compose.yaml
+curl -fsSL -o .env https://raw.githubusercontent.com/SileyOf/orimg/main/backend/docker/.env.example
+docker compose up -d
+docker compose logs origin    # 日志中有一次性安装码
+```
+
+默认只监听 `127.0.0.1:8080`，请用 Nginx / Caddy 配置 HTTPS 反代后访问 `https://你的域名/install`。需要连同 MySQL 一起部署、反向代理设置等见 [Docker 指南](backend/docs/DOCKER.md)。
+
+升级：把 `.env` 中的 `ORIGIN_IMAGE` 改成新版本号，执行 `docker compose pull && docker compose up -d`。
+
+从 v0.4.x 二进制部署迁入见 [迁移指南](backend/docs/MIGRATE_FROM_BINARY.md)。
 
 ## 文档导航
 
-- [Changelog](CHANGELOG.md)：版本变更与本次源码整理记录。
-- [部署入口](backend/README_DEPLOY.md)：当前安装、升级与旧站点迁入。
+- [Changelog](CHANGELOG.md)：版本变更记录。
+- [部署入口](backend/README_DEPLOY.md)：安装、升级与旧站点迁入。
 - [开发指南](backend/docs/DEVELOPMENT.md)：源码目录、构建、隔离测试与打包。
 - [安全说明](SECURITY.md)、[贡献约定](CONTRIBUTING.md)、[第三方许可](THIRD_PARTY_NOTICES.md)。
-
-当前应用版本 v0.5.1（审计与性能优化版，见 [Changelog](CHANGELOG.md)）。源码包不包含生产配置、用户数据或预编译镜像。项目级开源许可证尚未选定，不能将此包视为已完成公开开源发行。
 
 ## 主要功能
 
@@ -68,3 +85,7 @@ http://localhost:8080/install
 - `GET /api/admin/trash`：回收站。
 
 生产升级步骤和 aaPanel 文件清单见 [backend/README_DEPLOY.md](backend/README_DEPLOY.md)。
+
+## 许可证
+
+Origin 以 [GNU AGPL-3.0](LICENSE) 授权。修改后以网络服务形式提供给他人使用时，需要按 AGPL 向用户提供对应源码。第三方组件许可见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

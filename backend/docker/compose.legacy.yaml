@@ -1,0 +1,41 @@
+# For sites moved from the v0.4.x binary install. Use this file on its own:
+#   docker compose -f compose.legacy.yaml up -d
+#
+# - legacy.env is the old site's .env copied unchanged. It is mounted as
+#   /app/.env and parsed by the application exactly like the binary did
+#   (Compose env_file would expand "$" inside passwords and keys).
+# - Host networking keeps 127.0.0.1 meaning the server itself, so the existing
+#   MySQL account, DB_HOST and TRUSTED_PROXIES keep working unchanged.
+# - ./data is a copy of the old data/ directory, owned by 10001:10001.
+# - Background work starts paused. Set DISABLE_BACKGROUND_WORK=false in .env
+#   after checking the site, then run the up command again.
+name: origin
+services:
+  origin:
+    image: ${ORIGIN_IMAGE:-yuki955/orimg:0.5.2}
+    pull_policy: missing
+    restart: unless-stopped
+    network_mode: host
+    user: "10001:10001"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    environment:
+      # The old .env cannot override variables set here or in the image.
+      PORT: ${ORIGIN_PORT:-8080}
+      TZ: ${TZ:-Asia/Shanghai}
+      DISABLE_BACKGROUND_WORK: ${DISABLE_BACKGROUND_WORK:-true}
+    volumes:
+      - ./legacy.env:/app/.env:ro
+      - ./data:/app/data
+      # Absolute storage paths saved in the database must appear at the same
+      # path inside the container, for example:
+      # - /mnt/nas/images:/mnt/nas/images
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=512m,mode=1777
+    stop_grace_period: 40s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

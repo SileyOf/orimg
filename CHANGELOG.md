@@ -2,6 +2,26 @@
 
 版本使用三段式编号。以下依据随项目保留的发布说明整理；早期 beta 按阶段归纳，不补写无法核实的发布日期。历史验证记录不代表本次重新完成全部验收。
 
+## v0.5.2 — 2026-11-16
+
+开源与 Docker Hub 发布版。数据库结构保持 9，无新增迁移。详见 [升级说明](backend/docs/UPGRADE_v0.5.2.md)。
+
+### 发布
+
+- 以 AGPL-3.0 在 GitHub 开源（`SileyOf/orimg`），镜像发布到 Docker Hub `yuki955/orimg`（amd64 / arm64，版本号标签与 `latest`）。
+- Compose 默认使用 Docker Hub 镜像，升级改为 `docker compose pull && docker compose up -d`；离线包载入的镜像同名，可继续离线使用。
+- 默认站点名称、邮件发件人名称等品牌文字改为中性的 “Origin”；已保存的站点设置不受影响。
+
+### 二进制旧站迁移
+
+- 新增 [迁移指南](backend/docs/MIGRATE_FROM_BINARY.md)、独立的 `compose.legacy.yaml`（主机网络，旧 `.env` 原样只读挂载为 `/app/.env`，后台任务默认暂停）与只读预检查脚本 `migrate-check.sh`。
+- 镜像不再预设 `INSTALL_CONFIG`、`UPLOAD_DIR`、`CACHE_DIR`、`ASSET_DIR`，挂载的旧 `.env` 中的路径与二进制部署时语义一致；默认值仍解析到 `/app/data/...`，新安装不受影响。
+- 设置中的 `mysqldump_path` 在容器内不存在时，自动改用镜像自带的 `mysqldump`。
+
+### 测试
+
+- 容器冒烟测试新增旧站场景：挂载 `.env`（含 `$` 的数据库密码、自定义上传目录、端口覆盖）、环境变量引导、登录、上传。
+
 ## v0.5.1 — 2026-11-16
 
 代码审计后的首次优化。数据库结构保持 9，无新增迁移，可与 v0.5.0 直接互换。详见 [升级说明](backend/docs/UPGRADE_v0.5.1.md)。

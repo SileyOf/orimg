@@ -1,27 +1,25 @@
-# Origin v0.5.1 Docker 部署
+# Origin v0.5.2 Docker 部署
 
-当前镜像名 `origin:0.5.1`（首个容器发行版为 v0.5.0）。提供 Linux x86_64 (`amd64`) 和 ARM64 离线部署包，尚未发布到公共镜像仓库。应用镜像已包含 Go 程序、前端、CA 证书、时区数据及 Oracle MySQL 8.4 的 `mysqldump` 和所需运行库，不需要在 VPS 安装 Go 或 MySQL 客户端。
+镜像发布在 Docker Hub：`yuki955/orimg`，提供 Linux x86_64 (`amd64`) 和 ARM64，同一标签自动匹配架构。每个版本同时有版本号标签（如 `0.5.2`）和 `latest`；生产环境请固定版本号。镜像包含 Go 程序、前端、CA 证书、时区数据及 Oracle MySQL 8.4 的 `mysqldump` 和所需运行库，不需要在 VPS 安装 Go 或 MySQL 客户端。
 
-数据库是独立服务，不和应用放在同一个容器。可以继续使用已有 MySQL，也可以选择附带的 Compose 数据库方案。新建数据库方案首次需要下载固定版本的 MySQL 镜像；应用离线包不包含数据库服务端镜像或任何业务数据。
+数据库是独立服务，不和应用放在同一个容器。可以继续使用已有 MySQL，也可以选择附带的 Compose 数据库方案。
 
-## 1. 加载镜像
+**从 v0.4.x 二进制站点迁入请直接看 [迁移指南](MIGRATE_FROM_BINARY.md)**，不要按下面的全新安装流程操作。
 
-先用 `uname -m` 确认 VPS 架构：`x86_64` 对应 amd64，`aarch64` 对应 arm64。将对应压缩包放到 VPS 并解压，在解压目录执行：
+## 1. 安装
+
+从仓库 `backend/docker/` 取 `compose.yaml`（可选 `compose.mysql.yaml`）和 `.env.example` 放到服务器同一目录：
 
 ```sh
-sha256sum -c SHA256SUMS
-docker load -i origin-image.tar
-docker run --rm origin:0.5.1 -version
-cp .env.example .env
+cp .env.example .env          # Compose 参数，不是应用配置
+docker compose pull
 docker compose up -d
 docker compose logs origin
 ```
 
-最后一条命令会显示一次性安装码。`.env.example` 是 Compose 参数模板，不是旧应用配置，**不得覆盖旧生产 `.env`**。只加载所需架构的包即可。镜像离线加载后，Compose 不会自动去公共仓库拉取同名镜像。
+最后一条命令会显示一次性安装码。`.env.example` 是 Compose 参数模板，不是旧应用配置，**不得覆盖旧生产 `.env`**。
 
-默认只监听 VPS 的 `127.0.0.1:8080`，避免明文安装页暴露公网。使用原 Nginx/Caddy 为域名配置 HTTPS，反代到该地址。访问 `https://你的域名/install` 完成数据库和管理员设置。
-
-安装接口要求 HTTPS 或容器内部回环请求。Docker 端口映射后的来源通常是网桥地址，不等同容器内回环，因此直接 HTTP 访问宿主机 8080 或 SSH 端口转发不自动绕过 HTTPS 检查。
+无法访问 Docker Hub 的服务器可以使用发布页的离线包：`sha256sum -c SHA256SUMS && docker load -i origin-image.tar`，载入的镜像名与 Docker Hub 相同，Compose 不会再去拉取。
 
 ## 2. 反向代理
 
@@ -64,30 +62,15 @@ docker compose -f compose.yaml -f compose.mysql.yaml up -d
 
 ## 4. 从 v0.4.x 二进制部署切换
 
-建议先在隔离环境演练，再安排短暂停机窗口。v0.5.0 / v0.5.1 均没有新增数据库表或字段，结构版本仍为 9；从更早版本接入可能执行之前缺失的迁移。
-
-1. 停止旧应用及后台任务，备份数据库、原 `.env` 或 `installation.json`、`installation.json.session-key`、所有原图/副本/背景目录。数据库备份不包含这些文件。
-2. 不要运行全新安装覆盖旧账号。两种配置方式选择一种：复制已有安装文件和完整数据目录，或复制原应用 `.env` 为独立的 `legacy.env`，配合 `compose.legacy.yaml.example`。
-3. 将示例复制成 `compose.legacy.yaml`，把备份出的完整数据目录放在同目录的 `data/`。保留原 `JWT_SECRET` 和签名密钥，不重新生成。只在配置副本中调整容器需要的数据库主机地址及文件挂载，不改原生产备份。
-4. 镜像以 UID/GID `10001:10001` 运行。为**新复制的数据目录**设置该 UID/GID 的读写权限，例如 `chown -R 10001:10001 ./data`。不要对原生产目录、整块 NAS 或宿主机根目录递归修改权限。安装配置和签名密钥应为 0600。
-5. 在数据库中配置的相对 `data/...` 路径会相对 `/app` 解析。自定义绝对路径、NAS 和独立磁盘必须挂载到容器中相同的路径。环境变量不会覆盖旧库中已保存的路径；不要仅复制 `.env` 就认为图片已迁入。旧 `static/assets/site-*` 自定义 Logo/背景应复制到 `data/site-assets/`，原 URL 保持不变。
-6. 如果保留 `installation.json`，数据库地址等以该文件为准，`DB_HOST` 环境变量不会覆盖它。需要调整时只修改停服后的配置副本。保留自定义 `INSTALL_CONFIG` 所对应的同名 `.session-key`；默认位置是 `/app/data/installation.json.session-key`。
-7. 使用下列命令启动，此示例强制暂停后台任务：
-
-```sh
-docker compose -f compose.yaml -f compose.legacy.yaml up -d
-docker compose -f compose.yaml -f compose.legacy.yaml logs origin
-```
-
-确认 `/api/ready` 返回 200、账号可登录、历史图片与原设置可用后，再将覆盖文件中的 `DISABLE_BACKGROUND_WORK` 改为 `"false"` 并重建应用容器。避免旧、新部署同时发信或同步。若旧设置中的 `mysqldump_path` 是宿主机自定义绝对路径，需在后台明确改为容器内 `/usr/bin/mysqldump`；不会自动改写你的数据库设置。
+见 [迁移指南](MIGRATE_FROM_BINARY.md)：使用独立的 `compose.legacy.yaml`（主机网络、旧 `.env` 原样只读挂载、后台任务先暂停），并用只读的 `migrate-check.sh` 预检查路径、端口与数据库设置。
 
 ## 5. 持久化、更新与回退
 
 - 新安装默认命名卷 `origin_origin-data` 挂载到 `/app/data`，包括安装配置、签名密钥、图片、缓存及自定义站点资源。Compose 项目名改变会使用不同的默认卷，升级时保持项目名与挂载不变。
 - MySQL 方案另有 `origin_mysql-data`。切勿使用 `docker compose down -v` 做普通更新，该命令会删除数据卷。
 - 应用根文件系统只读，`/tmp` 是有容量上限的临时空间，移除容器会丢失，不能存放长期图片。自定义存储路径必须额外挂载。
-- 更新时备份数据，加载新镜像，调整 `ORIGIN_IMAGE`，再 `docker compose up -d`。数据不在镜像里，不能只备份镜像。
-- 本版可停服后回退 v0.4.8 原二进制及原静态资源，继续使用备份的原配置与数据。不要同时运行两套工作器。对后续有数据库迁移的版本，不能假设换镜像即可回退。
+- 更新：备份数据，把 `.env` 中的 `ORIGIN_IMAGE` 改成新版本号，执行 `docker compose pull && docker compose up -d`。数据不在镜像里，不能只备份镜像。
+- v0.5.x 与 v0.4.7 / v0.4.8 数据库结构相同，可停服后回退原二进制，继续使用原配置与数据。不要同时运行两套工作器。对后续有数据库迁移的版本，不能假设换镜像即可回退。
 - Docker 健康检查是存活检查，安装前也可 healthy。`/api/ready` 才表示已安装且数据库可连接；未安装或数据库故障时返回 503。启动失败应先看日志，不要删数据卷重试。
 
 ## 6. 源码构建与测试
@@ -95,7 +78,7 @@ docker compose -f compose.yaml -f compose.legacy.yaml logs origin
 在 `backend/` 目录执行：
 
 ```sh
-docker buildx build --platform linux/amd64,linux/arm64 --tag origin:0.5.1 --provenance=false --load .
+docker buildx build --platform linux/amd64,linux/arm64 --tag yuki955/orimg:0.5.2 --provenance=false --load .
 GO_BIN=/path/to/go node docker/smoke.cjs
 node release/docker-package.cjs
 ```

@@ -1,15 +1,15 @@
-# Origin v0.5.1 部署入口
+# Origin v0.5.2 部署入口
 
-当前版本为 v0.5.1，数据库结构版本为 9（与 v0.5.0 相同，无新增迁移）。源码包不包含可执行程序、Docker 镜像或任何站点运行数据。
+当前版本为 v0.5.2，数据库结构版本为 9（v0.4.7 起未变）。源码包不包含可执行程序、Docker 镜像或任何站点运行数据。
 
 ## 选择部署方式
 
 | 场景 | 指南 |
 | --- | --- |
 | 首次使用 Docker / Compose | [Docker 部署](docs/DOCKER.md) |
+| 二进制旧站迁到 Docker | [迁移指南](docs/MIGRATE_FROM_BINARY.md) |
 | 首次使用 Go 程序、初始化数据库与管理员 | [安装与旧库接入](docs/INSTALLATION.md) |
-| 旧二进制站点切换 Docker | [迁入步骤](docs/DOCKER.md#4-从-v04x-二进制部署切换) |
-| 从 v0.5.0 升级到 v0.5.1 | [v0.5.1 升级说明](docs/UPGRADE_v0.5.1.md) |
+| 从 v0.5.x 升级 | [v0.5.2](docs/UPGRADE_v0.5.2.md)、[v0.5.1](docs/UPGRADE_v0.5.1.md) 升级说明 |
 | v0.4.7 密钥检查导致启动失败 | [v0.4.8 兼容修复](docs/UPGRADE_v0.4.8.md) |
 | 版本差异与历史变更 | [Changelog](../CHANGELOG.md) |
 | 编译、测试及源码打包 | [开发指南](docs/DEVELOPMENT.md) |
@@ -23,6 +23,6 @@
 - `DISABLE_BACKGROUND_WORK=true` 仅暂停自动任务，不是数据库只读模式；手动 API 仍可写入。
 - `/api/health` 是进程存活检查；`/api/ready` 才反映安装与数据库就绪情况。
 
-生产部署前应在隔离环境验证旧图访问和备份恢复。本源码整理未执行生产升级、数据库迁移、真实发信或对象存储操作。
+生产部署前应在隔离环境验证旧图访问和备份恢复。
 
 此前逐次发布的完整说明保留在 [历史部署记录](README_DEPLOY_HISTORY.md)。历史记录中的路径、默认值和未完成事项只代表相应版本，发生冲突时以当前指南为准。

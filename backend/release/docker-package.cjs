@@ -8,7 +8,7 @@ const { execFileSync } = require('node:child_process');
   const source = await fs.readFile(path.join(root, 'config/config.go'), 'utf8');
   const version = source.match(/const AppVersion = "v(\d+\.\d+\.\d+)"/)?.[1];
   if (!version) throw Error('Invalid release version');
-  const image = `origin:${version}`;
+  const image = `yuki955/orimg:${version}`;
   const dist = path.join(root, 'dist');
   await fs.mkdir(dist, { recursive: true });
   const stage = await fs.mkdtemp(path.join(dist, '.docker-release-'));
@@ -23,7 +23,8 @@ const { execFileSync } = require('node:child_process');
       const dest = path.join(stage, name);
       await fs.mkdir(dest);
       for (const [from, to] of [['docker/compose.yaml','compose.yaml'], ['docker/compose.mysql.yaml','compose.mysql.yaml'],
-        ['docker/compose.legacy.yaml.example','compose.legacy.yaml.example'], ['docker/.env.example','.env.example'], ['docs/DOCKER.md','README.md']]) {
+        ['docker/compose.legacy.yaml','compose.legacy.yaml'], ['docker/migrate-check.sh','migrate-check.sh'], ['docker/.env.example','.env.example'],
+        ['docs/DOCKER.md','README.md'], ['docs/MIGRATE_FROM_BINARY.md','MIGRATE_FROM_BINARY.md']]) {
         await fs.copyFile(path.join(root, from), path.join(dest, to));
       }
       execFileSync('docker', ['image', 'save', '--platform', `linux/${arch}`, '-o', path.join(dest, 'origin-image.tar'), image], { stdio: 'inherit' });
