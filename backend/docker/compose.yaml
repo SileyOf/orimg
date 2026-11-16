@@ -1,7 +1,7 @@
 name: origin
 services:
   origin:
-    image: ${ORIGIN_IMAGE:-origin:0.5.0}
+    image: ${ORIGIN_IMAGE:-origin:0.5.1}
     pull_policy: never
     restart: unless-stopped
     user: "10001:10001"

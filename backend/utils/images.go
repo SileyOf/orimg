@@ -5,7 +5,6 @@ import (
 	"encoding/xml"
 	"errors"
 	"image"
-	"image/color"
 	_ "image/gif"
 	"image/jpeg"
 	_ "image/png"
@@ -292,46 +291,15 @@ func IsAnimatedMultipart(header *multipart.FileHeader, mimeType string) bool {
 }
 
 func ThumbnailJPEG(body []byte, maxSide int) ([]byte, int, int, error) {
-	cfg, _, err := image.DecodeConfig(bytes.NewReader(body))
-	if err != nil || cfg.Width <= 0 || cfg.Height <= 0 || int64(cfg.Width)*int64(cfg.Height) > 16_000_000 {
-		return nil, 0, 0, errors.New("thumbnail exceeds decode budget")
-	}
-	thumbnailDecodeSlot <- struct{}{}
-	defer func() { <-thumbnailDecodeSlot }()
-	if maxSide <= 0 {
-		maxSide = 320
-	}
-	src, _, err := image.Decode(bytes.NewReader(body))
+	out, err := Thumbnails(body, []int{maxSide})
 	if err != nil {
 		return nil, 0, 0, err
 	}
-	bounds := src.Bounds()
-	srcW := bounds.Dx()
-	srcH := bounds.Dy()
-	if srcW <= 0 || srcH <= 0 {
-		return nil, 0, 0, errors.New("invalid image dimensions")
-	}
-	dstW, dstH := fitSize(srcW, srcH, maxSide)
-	dst := image.NewRGBA(image.Rect(0, 0, dstW, dstH))
-	for y := 0; y < dstH; y++ {
-		srcY := bounds.Min.Y + int(float64(y)*float64(srcH)/float64(dstH))
-		if srcY >= bounds.Max.Y {
-			srcY = bounds.Max.Y - 1
-		}
-		for x := 0; x < dstW; x++ {
-			srcX := bounds.Min.X + int(float64(x)*float64(srcW)/float64(dstW))
-			if srcX >= bounds.Max.X {
-				srcX = bounds.Max.X - 1
-			}
-			dst.SetRGBA(x, y, flattenOnWhite(src.At(srcX, srcY)))
-		}
-	}
-
-	var out bytes.Buffer
-	if err := jpeg.Encode(&out, dst, &jpeg.Options{Quality: 84}); err != nil {
+	cfg, err := jpeg.DecodeConfig(bytes.NewReader(out[0]))
+	if err != nil {
 		return nil, 0, 0, err
 	}
-	return out.Bytes(), dstW, dstH, nil
+	return out[0], cfg.Width, cfg.Height, nil
 }
 
 var thumbnailDecodeSlot = make(chan struct{}, 1)
@@ -420,23 +388,4 @@ func fitSize(width, height, maxSide int) (int, int) {
 		dstW = 1
 	}
 	return dstW, dstH
-}
-
-func flattenOnWhite(c color.Color) color.RGBA {
-	r, g, b, a := c.RGBA()
-	if a == 0xffff {
-		return color.RGBA{R: uint8(r >> 8), G: uint8(g >> 8), B: uint8(b >> 8), A: 0xff}
-	}
-	alpha := float64(a) / 65535
-	blend := func(channel uint32) uint8 {
-		v := float64(channel>>8)*alpha + 255*(1-alpha)
-		if v < 0 {
-			v = 0
-		}
-		if v > 255 {
-			v = 255
-		}
-		return uint8(v + 0.5)
-	}
-	return color.RGBA{R: blend(r), G: blend(g), B: blend(b), A: 0xff}
 }

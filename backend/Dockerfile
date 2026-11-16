@@ -26,7 +26,7 @@ RUN /bin/bash /collect-runtime.sh
 
 FROM scratch
 LABEL org.opencontainers.image.title="Origin" \
-      org.opencontainers.image.version="0.5.0" \
+      org.opencontainers.image.version="0.5.1" \
       org.opencontainers.image.description="Origin image hosting with persistent configuration and MySQL backup client"
 COPY --from=client /runtime/ /
 COPY --from=build /out/zhuapic /app/zhuapic

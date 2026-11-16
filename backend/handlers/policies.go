@@ -283,6 +283,7 @@ func (a *App) deleteGroup(w http.ResponseWriter, r *http.Request) {
 		utils.WriteError(w, http.StatusInternalServerError, "failed to delete user group")
 		return
 	}
+	utils.InvalidateSettings(a.DB)
 	actor, _ := a.currentUser(r)
 	a.writeAudit(r, actor, "user_group.deleted", "user_group", strconv.FormatUint(uint64(id), 10), map[string]any{"name": name, "unassigned_users": members})
 	utils.WriteJSON(w, http.StatusOK, map[string]any{"deleted": true})

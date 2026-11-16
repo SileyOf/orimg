@@ -1,6 +1,6 @@
-# Origin v0.5.0 Docker 部署
+# Origin v0.5.1 Docker 部署
 
-本版是首个容器发行版，镜像名 `origin:0.5.0`。提供 Linux x86_64 (`amd64`) 和 ARM64 离线部署包，尚未发布到公共镜像仓库。应用镜像已包含 Go 程序、前端、CA 证书、时区数据及 Oracle MySQL 8.4 的 `mysqldump` 和所需运行库，不需要在 VPS 安装 Go 或 MySQL 客户端。
+当前镜像名 `origin:0.5.1`（首个容器发行版为 v0.5.0）。提供 Linux x86_64 (`amd64`) 和 ARM64 离线部署包，尚未发布到公共镜像仓库。应用镜像已包含 Go 程序、前端、CA 证书、时区数据及 Oracle MySQL 8.4 的 `mysqldump` 和所需运行库，不需要在 VPS 安装 Go 或 MySQL 客户端。
 
 数据库是独立服务，不和应用放在同一个容器。可以继续使用已有 MySQL，也可以选择附带的 Compose 数据库方案。新建数据库方案首次需要下载固定版本的 MySQL 镜像；应用离线包不包含数据库服务端镜像或任何业务数据。
 
@@ -11,7 +11,7 @@
 ```sh
 sha256sum -c SHA256SUMS
 docker load -i origin-image.tar
-docker run --rm origin:0.5.0 -version
+docker run --rm origin:0.5.1 -version
 cp .env.example .env
 docker compose up -d
 docker compose logs origin
@@ -64,7 +64,7 @@ docker compose -f compose.yaml -f compose.mysql.yaml up -d
 
 ## 4. 从 v0.4.x 二进制部署切换
 
-建议先在隔离环境演练，再安排短暂停机窗口。v0.5.0 没有新增数据库表或字段，结构版本仍为 9；从更早版本接入可能执行之前缺失的迁移。
+建议先在隔离环境演练，再安排短暂停机窗口。v0.5.0 / v0.5.1 均没有新增数据库表或字段，结构版本仍为 9；从更早版本接入可能执行之前缺失的迁移。
 
 1. 停止旧应用及后台任务，备份数据库、原 `.env` 或 `installation.json`、`installation.json.session-key`、所有原图/副本/背景目录。数据库备份不包含这些文件。
 2. 不要运行全新安装覆盖旧账号。两种配置方式选择一种：复制已有安装文件和完整数据目录，或复制原应用 `.env` 为独立的 `legacy.env`，配合 `compose.legacy.yaml.example`。
@@ -95,7 +95,7 @@ docker compose -f compose.yaml -f compose.legacy.yaml logs origin
 在 `backend/` 目录执行：
 
 ```sh
-docker buildx build --platform linux/amd64,linux/arm64 --tag origin:0.5.0 --provenance=false --load .
+docker buildx build --platform linux/amd64,linux/arm64 --tag origin:0.5.1 --provenance=false --load .
 GO_BIN=/path/to/go node docker/smoke.cjs
 node release/docker-package.cjs
 ```

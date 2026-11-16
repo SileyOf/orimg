@@ -287,6 +287,11 @@ func (c *Coordinator) NamedImagePath(ctx context.Context, image *models.Image) (
 	if info, err := os.Stat(path); err == nil && info.Size() == image.Size {
 		return path, true, nil
 	}
+	unlock := fillLocks.Lock(path)
+	defer unlock()
+	if info, err := os.Stat(path); err == nil && info.Size() == image.Size {
+		return path, true, nil
+	}
 	reader, err := c.imageSource(ctx, image.ID, 0)
 	if err != nil {
 		return "", true, err

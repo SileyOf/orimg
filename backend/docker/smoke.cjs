@@ -7,12 +7,12 @@ const { execFileSync, spawnSync } = require('node:child_process');
 (async () => {
   const root = path.resolve(__dirname, '..');
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'origin-docker-qa-'));
-  const id = `origin-050-qa-${process.pid}`;
+  const id = `origin-051-qa-${process.pid}`;
   const resources = { containers: [], volumes: [], network: false };
   const docker = (...args) => execFileSync('docker', args, { encoding: 'utf8', maxBuffer: 16 << 20, timeout: 180000 });
   const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
   const password = 'isolated-docker-fixture-password';
-  const image = process.env.ORIGIN_QA_IMAGE || 'origin:0.5.0';
+  const image = process.env.ORIGIN_QA_IMAGE || 'origin:0.5.1';
   const go = process.env.GO_BIN || 'go';
   const sql = query => docker('exec', '-e', `MYSQL_PWD=${password}`, `${id}-db`, 'mysql', '-uroot', '-Nse', query);
   async function wait(check) {
@@ -51,7 +51,7 @@ const { execFileSync, spawnSync } = require('node:child_process');
       };
       launch();
       await wait(() => docker('exec', name, '/app/zhuapic', '-healthcheck'));
-      assert.equal(docker('exec', name, '/app/zhuapic', '-version').trim(), 'v0.5.0');
+      assert.equal(docker('exec', name, '/app/zhuapic', '-version').trim(), 'v0.5.1');
       assert.equal(JSON.parse(docker('inspect', name))[0].Config.User, '10001:10001');
       const logResult = spawnSync('docker', ['logs', name], { encoding: 'utf8' });
       assert.equal(logResult.status, 0);
@@ -74,6 +74,11 @@ const { execFileSync, spawnSync } = require('node:child_process');
       const uploaded = api('POST', '/api/upload', null, login.token, 200, true);
       const imagePath = new URL(uploaded.url).pathname;
       api('GET', imagePath);
+      assert.ok(uploaded.image.thumb_small.includes('/t/small/'), 'thumbnail not generated');
+      api('GET', new URL(uploaded.image.thumb_small).pathname);
+      // Settings are cached briefly; admin writes must still apply immediately.
+      api('PUT', '/api/admin/settings', { site_name: `Smoke ${arch}` }, login.token);
+      assert.equal(api('GET', '/api/settings/public').site_name, `Smoke ${arch}`);
       // Validate real client DNS, TLS-capable runtime libraries and non-root DB credentials.
       const dump = docker('exec', '-e', `MYSQL_PWD=${password}`, name, '/usr/bin/mysqldump', '--no-tablespaces', '--set-gtid-purged=OFF',
         '--single-transaction', '--quick', '--skip-lock-tables', '--routines', '--events', '--triggers', '--protocol=TCP', '-hdb', '-uorigin', dbname);
@@ -87,7 +92,7 @@ const { execFileSync, spawnSync } = require('node:child_process');
       api('GET', '/api/me', null, login.token);
       api('GET', imagePath);
       api('GET', '/install', null, null, 404);
-      console.log(`${arch}: install, login, upload, original image, mysqldump, graceful stop and container recreation passed`);
+      console.log(`${arch}: install, login, upload, original image, thumbnail, settings refresh, mysqldump, graceful stop and container recreation passed`);
     }
   } finally {
     for (const name of resources.containers.reverse()) { try { docker('rm', '-f', name); } catch {} }

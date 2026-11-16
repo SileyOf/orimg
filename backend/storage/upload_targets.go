@@ -123,5 +123,7 @@ func (c *Coordinator) saveLegacyTarget(ctx context.Context, t, previous *Target)
 	if _, err := tx.ExecContext(ctx, "UPDATE storage_targets SET name=?,enabled=?,auto_backup=?,upload_access=? WHERE id=?", t.Name, t.Enabled, t.AutoBackup, t.UploadAccess, t.ID); err != nil {
 		return err
 	}
-	return tx.Commit()
+	err = tx.Commit()
+	utils.InvalidateSettings(c.db)
+	return err
 }

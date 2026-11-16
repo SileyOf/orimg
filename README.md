@@ -1,6 +1,6 @@
 # Origin
 
-Origin（起源图床）v0.5.0，基于 Go + MySQL，当前站点品牌为 Origin。支持命名存储、多地副本、相册、用户组及邮件账号流程。首版 Docker 提供 x86_64 / ARM64 离线部署包；公共镜像仓库尚未发布。
+Origin（起源图床）v0.5.1，基于 Go + MySQL，当前站点品牌为 Origin。支持命名存储、多地副本、相册、用户组及邮件账号流程。首版 Docker 提供 x86_64 / ARM64 离线部署包；公共镜像仓库尚未发布。
 
 Docker 部署、旧站点迁入和持久化说明见 [Docker 指南](backend/docs/DOCKER.md)。
 
@@ -11,7 +11,7 @@ Docker 部署、旧站点迁入和持久化说明见 [Docker 指南](backend/doc
 - [开发指南](backend/docs/DEVELOPMENT.md)：源码目录、构建、隔离测试与打包。
 - [安全说明](SECURITY.md)、[贡献约定](CONTRIBUTING.md)、[第三方许可](THIRD_PARTY_NOTICES.md)。
 
-本次整理保持应用版本 v0.5.0，仅收录源码与文档，不包含生产配置、用户数据或预编译镜像。项目级开源许可证尚未选定，不能将此包视为已完成公开开源发行。
+当前应用版本 v0.5.1（审计与性能优化版，见 [Changelog](CHANGELOG.md)）。源码包不包含生产配置、用户数据或预编译镜像。项目级开源许可证尚未选定，不能将此包视为已完成公开开源发行。
 
 ## 主要功能
 

@@ -62,20 +62,23 @@ func pbkdf2SHA256(password, salt []byte, iterations int, keyLen int) []byte {
 	hashLen := sha256.Size
 	numBlocks := (keyLen + hashLen - 1) / hashLen
 	out := make([]byte, 0, numBlocks*hashLen)
-
+	// One keyed HMAC is reused for every round; Reset keeps the precomputed
+	// inner/outer pads, so the result is identical but avoids per-round setup.
+	mac := hmac.New(sha256.New, password)
+	u := make([]byte, 0, hashLen)
+	t := make([]byte, hashLen)
+	var counter [4]byte
 	for block := 1; block <= numBlocks; block++ {
-		mac := hmac.New(sha256.New, password)
+		mac.Reset()
 		mac.Write(salt)
-		var counter [4]byte
 		binary.BigEndian.PutUint32(counter[:], uint32(block))
 		mac.Write(counter[:])
-		u := mac.Sum(nil)
-		t := append([]byte(nil), u...)
-
+		u = mac.Sum(u[:0])
+		copy(t, u)
 		for i := 1; i < iterations; i++ {
-			mac = hmac.New(sha256.New, password)
+			mac.Reset()
 			mac.Write(u)
-			u = mac.Sum(nil)
+			u = mac.Sum(u[:0])
 			for j := range t {
 				t[j] ^= u[j]
 			}
@@ -83,4 +86,24 @@ func pbkdf2SHA256(password, salt []byte, iterations int, keyLen int) []byte {
 		out = append(out, t...)
 	}
 	return out[:keyLen]
+}
+
+// dummyPasswordHash lets login spend the same PBKDF2 work for unknown
+// accounts, so response time does not reveal which emails are registered.
+var dummyPasswordHash = func() string {
+	hash, err := HashPassword("origin-timing-equalizer")
+	if err != nil {
+		return "pbkdf2_sha256$120000$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+	}
+	return hash
+}()
+
+// VerifyPasswordOrDummy behaves like VerifyPassword but always performs a full
+// hash computation, even when the stored hash is missing.
+func VerifyPasswordOrDummy(encoded string, found bool, password string) bool {
+	if !found {
+		VerifyPassword(dummyPasswordHash, password)
+		return false
+	}
+	return VerifyPassword(encoded, password)
 }

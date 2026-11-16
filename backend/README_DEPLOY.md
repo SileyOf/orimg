@@ -1,6 +1,6 @@
-# Origin v0.5.0 部署入口
+# Origin v0.5.1 部署入口
 
-当前版本为 v0.5.0，数据库结构版本为 9。源码包不包含可执行程序、Docker 镜像或任何站点运行数据。
+当前版本为 v0.5.1，数据库结构版本为 9（与 v0.5.0 相同，无新增迁移）。源码包不包含可执行程序、Docker 镜像或任何站点运行数据。
 
 ## 选择部署方式
 
@@ -9,6 +9,7 @@
 | 首次使用 Docker / Compose | [Docker 部署](docs/DOCKER.md) |
 | 首次使用 Go 程序、初始化数据库与管理员 | [安装与旧库接入](docs/INSTALLATION.md) |
 | 旧二进制站点切换 Docker | [迁入步骤](docs/DOCKER.md#4-从-v04x-二进制部署切换) |
+| 从 v0.5.0 升级到 v0.5.1 | [v0.5.1 升级说明](docs/UPGRADE_v0.5.1.md) |
 | v0.4.7 密钥检查导致启动失败 | [v0.4.8 兼容修复](docs/UPGRADE_v0.4.8.md) |
 | 版本差异与历史变更 | [Changelog](../CHANGELOG.md) |
 | 编译、测试及源码打包 | [开发指南](docs/DEVELOPMENT.md) |

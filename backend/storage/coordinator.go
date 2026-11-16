@@ -141,6 +141,15 @@ func (c *Coordinator) EnsureMirrorLocal(ctx context.Context, image *models.Image
 			return path, true, nil
 		}
 	}
+	unlock := fillLocks.Lock("mirror:" + strconv.FormatUint(uint64(image.ID), 10))
+	defer unlock()
+	// Re-check after waiting: a concurrent request may have restored the copy.
+	if err := c.db.QueryRowContext(ctx, `SELECT storage_key FROM image_replicas WHERE image_id = ? AND storage_mode = 'local' AND status = 'ready'`, image.ID).Scan(&localKey); err == nil {
+		path := c.manager.LocalPath(opts, localKey)
+		if _, statErr := os.Stat(path); statErr == nil {
+			return path, true, nil
+		}
+	}
 	var s3Key string
 	if err := c.db.QueryRowContext(ctx, `SELECT storage_key FROM image_replicas WHERE image_id = ? AND storage_mode = 's3' AND status = 'ready'`, image.ID).Scan(&s3Key); err != nil {
 		return "", false, errors.New("no healthy replica available")

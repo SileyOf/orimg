@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log"
 	"mime/multipart"
 	"net"
 	"net/http"
@@ -138,7 +139,7 @@ func (a *App) Login(w http.ResponseWriter, r *http.Request) {
 	var active bool
 	var version uint64
 	err := a.DB.QueryRow(`SELECT id, username, email, password, role, active, auth_version FROM users WHERE email = ?`, email).Scan(&id, &username, &storedEmail, &hash, &role, &active, &version)
-	if err != nil || !utils.VerifyPassword(hash, req.Password) {
+	if !utils.VerifyPasswordOrDummy(hash, err == nil, req.Password) {
 		utils.WriteError(w, http.StatusUnauthorized, "invalid email or password")
 		return
 	}
@@ -466,7 +467,19 @@ func (a *App) createImageFromUpload(w http.ResponseWriter, r *http.Request, head
 		utils.WriteError(w, http.StatusBadRequest, "failed to checksum image")
 		return
 	}
-	isAnimated := utils.IsAnimatedMultipart(header, mimeType)
+	// Read small originals once and reuse the bytes for animation detection
+	// and thumbnails instead of reopening the multipart file for each step.
+	const inspectLimit = 32 * 1024 * 1024
+	var inspectBody []byte
+	if mimeType != "image/svg+xml" && header.Size <= inspectLimit {
+		inspectBody, _ = utils.ReadMultipart(header, header.Size)
+	}
+	isAnimated := false
+	if inspectBody != nil {
+		isAnimated = utils.IsAnimatedImage(inspectBody, mimeType)
+	} else {
+		isAnimated = utils.IsAnimatedMultipart(header, mimeType)
+	}
 
 	image := models.Image{
 		PublicName:   random + ext,
@@ -490,13 +503,13 @@ func (a *App) createImageFromUpload(w http.ResponseWriter, r *http.Request, head
 		image.Username = user.Username
 	}
 	if err := a.Store.SaveReader(r.Context(), opts, mode, &image, reader, image.Size, checksum); err != nil {
-		utils.WriteError(w, http.StatusInternalServerError, err.Error())
+		// Storage errors can include filesystem paths or S3 responses.
+		log.Printf("upload: storing %s (%s) failed: %v", image.PublicName, mode, err)
+		utils.WriteError(w, http.StatusInternalServerError, "failed to store image")
 		return
 	}
-	if !image.IsAnimated && image.MimeType != "image/svg+xml" && image.Size <= 32*1024*1024 {
-		if body, readErr := utils.ReadMultipart(header, image.Size); readErr == nil {
-			a.createThumbnails(&image, body)
-		}
+	if !image.IsAnimated && image.MimeType != "image/svg+xml" && int64(len(inspectBody)) == image.Size {
+		a.createThumbnails(&image, inspectBody)
 	}
 	if err := a.insertImage(&image); err != nil {
 		_ = a.Store.Delete(r.Context(), opts, &image)
@@ -760,11 +773,16 @@ func (a *App) createThumbnails(image *models.Image, body []byte) {
 		{"medium", 720, func(path string) { image.ThumbMedium = path }},
 		{"large", 1440, func(path string) { image.ThumbLarge = path }},
 	}
-	for _, target := range targets {
-		thumb, _, _, err := utils.ThumbnailJPEG(body, target.size)
-		if err != nil {
-			return
-		}
+	sizes := make([]int, len(targets))
+	for i, target := range targets {
+		sizes[i] = target.size
+	}
+	thumbs, err := utils.Thumbnails(body, sizes)
+	if err != nil {
+		return
+	}
+	for i, target := range targets {
+		thumb := thumbs[i]
 		rel := filepath.Join(day, target.name, base+".jpg")
 		dest := filepath.Join(opts.ThumbDir, rel)
 		if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {

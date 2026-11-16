@@ -358,6 +358,7 @@ func (c *Coordinator) SetDefaultTarget(ctx context.Context, id uint) error {
 		}
 	}
 	_, err := c.db.ExecContext(ctx, "INSERT INTO site_settings (`key`,value) VALUES ('default_storage_target_id',?) ON DUPLICATE KEY UPDATE value=VALUES(value)", strconv.FormatUint(uint64(id), 10))
+	utils.InvalidateSettings(c.db)
 	return err
 }
 

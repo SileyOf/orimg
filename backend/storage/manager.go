@@ -225,26 +225,30 @@ func (m *Manager) CachePath(opts Options, publicName string) string {
 func (m *Manager) EnsureS3Cache(ctx context.Context, opts Options, image *models.Image, ttl time.Duration) (string, bool, error) {
 	opts = m.normalizeOptions(opts)
 	cachePath := m.CachePath(opts, image.PublicName)
-	if stat, err := os.Stat(cachePath); err == nil {
-		if time.Since(stat.ModTime()) < ttl {
-			return cachePath, true, nil
-		}
-		_ = os.Remove(cachePath)
+	fresh := func() bool {
+		stat, err := os.Stat(cachePath)
+		return err == nil && time.Since(stat.ModTime()) < ttl
 	}
+	if fresh() {
+		return cachePath, true, nil
+	}
+	unlock := fillLocks.Lock(cachePath)
+	defer unlock()
+	// Another request may have filled the cache while this one waited.
+	if fresh() {
+		return cachePath, true, nil
+	}
+	_ = os.Remove(cachePath)
 
-	body, err := NewS3Client(opts.S3).GetObject(ctx, image.StorageKey)
+	body, err := NewS3Client(opts.S3).OpenObject(ctx, image.StorageKey)
 	if err != nil {
 		return "", false, err
 	}
-	if err := os.MkdirAll(opts.CacheDir, 0755); err != nil {
-		return "", false, err
-	}
-	tmp := cachePath + ".tmp"
-	if err := os.WriteFile(tmp, body, 0644); err != nil {
-		return "", false, err
-	}
-	if err := os.Rename(tmp, cachePath); err != nil {
-		_ = os.Remove(tmp)
+	defer body.Close()
+	// Stream to a unique temp file so readers never see a partial object.
+	// Sizes are not enforced here: records imported from old versions may
+	// carry inexact sizes, and short HTTP bodies already fail the copy.
+	if err := writeAtomicReader(cachePath, body); err != nil {
 		return "", false, err
 	}
 	return cachePath, false, nil
@@ -275,6 +279,15 @@ func writeAtomic(path string, body []byte) error {
 }
 
 func writeAtomicReader(path string, reader io.Reader) error {
+	return writeAtomicSized(path, reader, -1)
+}
+
+// writeAtomicSized writes through a unique temp file and renames it into place.
+// When size is positive, a short or oversized body is rejected before rename.
+func writeAtomicSized(path string, reader io.Reader, size int64) error {
+	if size > 0 {
+		reader = io.LimitReader(reader, size+1)
+	}
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return err
 	}
@@ -288,9 +301,14 @@ func writeAtomicReader(path string, reader io.Reader) error {
 		_ = tmp.Close()
 		return err
 	}
-	if _, err := io.Copy(tmp, reader); err != nil {
+	written, err := io.Copy(tmp, reader)
+	if err != nil {
 		_ = tmp.Close()
 		return err
+	}
+	if size > 0 && written != size {
+		_ = tmp.Close()
+		return fmt.Errorf("unexpected object size: expected %d, received %d", size, written)
 	}
 	if err := tmp.Sync(); err != nil {
 		_ = tmp.Close()

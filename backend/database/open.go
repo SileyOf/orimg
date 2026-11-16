@@ -180,6 +180,8 @@ func Initialize(ctx context.Context, db *sql.DB, cfg *config.Config, bootstrap b
 			return err
 		}
 	}
+	// Migrations write site_settings directly; drop any snapshot read earlier.
+	defer utils.InvalidateSettings(db)
 	if err = migrate(db, cfg); err != nil {
 		return err
 	}

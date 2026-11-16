@@ -4,31 +4,107 @@ import (
 	"database/sql"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
+// Settings are read on nearly every request (CORS, rate limits, storage
+// paths), so a short-lived per-database snapshot replaces one query per key.
+// Writes through this process invalidate it immediately; changes made by other
+// processes or direct SQL become visible within settingsCacheTTL.
+const settingsCacheTTL = 2 * time.Second
+
+type settingsSnapshot struct {
+	values map[string]string
+	loaded time.Time
+}
+
+type settingsCache struct {
+	mu         sync.Mutex
+	snapshot   *settingsSnapshot
+	generation uint64
+}
+
+var settingsCaches sync.Map // *sql.DB -> *settingsCache
+
+func cacheFor(db *sql.DB) *settingsCache {
+	if cache, ok := settingsCaches.Load(db); ok {
+		return cache.(*settingsCache)
+	}
+	cache, _ := settingsCaches.LoadOrStore(db, &settingsCache{})
+	return cache.(*settingsCache)
+}
+
+// InvalidateSettings drops the cached snapshot after site_settings changes.
+func InvalidateSettings(db *sql.DB) {
+	cache := cacheFor(db)
+	cache.mu.Lock()
+	cache.snapshot = nil
+	cache.generation++
+	cache.mu.Unlock()
+}
+
+func cachedSettings(db *sql.DB) (map[string]string, bool) {
+	cache := cacheFor(db)
+	cache.mu.Lock()
+	if snap := cache.snapshot; snap != nil && time.Since(snap.loaded) < settingsCacheTTL {
+		cache.mu.Unlock()
+		return snap.values, true
+	}
+	generation := cache.generation
+	cache.mu.Unlock()
+	values, err := loadSettings(db)
+	if err != nil {
+		return nil, false
+	}
+	cache.mu.Lock()
+	if cache.generation == generation {
+		cache.snapshot = &settingsSnapshot{values: values, loaded: time.Now()}
+	}
+	cache.mu.Unlock()
+	return values, true
+}
+
+func loadSettings(db *sql.DB) (map[string]string, error) {
+	rows, err := db.Query(`SELECT ` + "`key`" + `, value FROM site_settings`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]string{}
+	for rows.Next() {
+		var key, value string
+		if err := rows.Scan(&key, &value); err == nil {
+			out[key] = value
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func GetSetting(db *sql.DB, key string, fallback string) string {
-	var value string
-	if err := db.QueryRow(`SELECT value FROM site_settings WHERE `+"`key`"+` = ?`, key).Scan(&value); err != nil {
+	values, ok := cachedSettings(db)
+	if !ok {
+		return fallback
+	}
+	value, found := values[key]
+	if !found {
 		return fallback
 	}
 	return value
 }
 
+// GetSettings returns a private copy that callers may modify.
 func GetSettings(db *sql.DB) map[string]string {
-	rows, err := db.Query(`SELECT ` + "`key`" + `, value FROM site_settings`)
-	if err != nil {
-		return map[string]string{}
+	values, ok := cachedSettings(db)
+	out := make(map[string]string, len(values))
+	if !ok {
+		return out
 	}
-	defer rows.Close()
-
-	out := map[string]string{}
-	for rows.Next() {
-		var key string
-		var value string
-		if err := rows.Scan(&key, &value); err == nil {
-			out[key] = value
-		}
+	for key, value := range values {
+		out[key] = value
 	}
 	return out
 }
@@ -40,6 +116,7 @@ func UpsertSetting(db *sql.DB, key, value string) error {
 		key,
 		value,
 	)
+	InvalidateSettings(db)
 	return err
 }
 
