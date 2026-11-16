@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <script src="/assets/appearance.js?v=0.4.6"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>图片上传</title>
+    <link rel="icon" href="/assets/favicon.svg?v=0.4.6" />
+    <link rel="stylesheet" href="/assets/styles.css?v=0.4.6" />
+    <link rel="stylesheet" href="/assets/design.css?v=0.4.6" />
+    <link rel="stylesheet" href="/assets/appearance.css?v=0.4.6" />
+    <link rel="stylesheet" href="/assets/background.css?v=0.4.6" />
+    <link rel="stylesheet" href="/assets/account.css?v=0.4.6" />
+    <link rel="stylesheet" href="/assets/responsive.css?v=0.4.6" />
+  </head>
+  <body class="mode-classic ui-v4" data-site-state="loading" data-brand-pending>
+    <section class="site-load-state" id="siteLoadState" aria-label="站点加载">
+      <p id="siteLoadMessage" role="status">正在加载</p>
+      <button id="retrySiteLoad" class="ghost-button compact" type="button" hidden>重新加载</button>
+      <noscript>请启用 JavaScript 后重新打开页面。</noscript>
+    </section>
+    <div class="drag-screen" id="dragScreen" hidden>
+      <div>
+        <strong>松手上传</strong>
+        <span>图片会进入批量队列</span>
+      </div>
+    </div>
+
+    <div class="page" id="sitePage" inert aria-busy="true">
+      <header class="topbar">
+        <a class="brand" href="/" aria-label="首页">
+          <img class="brand-logo" src="/assets/logo.svg" alt="" />
+          <span>
+            <strong id="siteName" data-site-name></strong>
+            <small id="siteTagline" hidden></small>
+          </span>
+        </a>
+        <div class="top-actions">
+          <div class="top-compact-control" id="adminStorageControl" hidden>
+            <label for="storageSelect">存储</label>
+            <select id="storageSelect" aria-label="本次上传存储">
+              <option value="default">默认存储</option>
+            </select>
+          </div>
+          <button class="icon-button" id="themeButton" type="button" title="主题" aria-label="主题">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9Z"/></svg>
+          </button>
+          <div id="accountSlot"></div>
+          <a class="ghost-button compact" id="accountLink" href="/dashboard">用户中心</a>
+        </div>
+      </header>
+
+      <main class="workspace">
+        <section class="intro-panel rich-panel">
+          <p class="eyebrow" id="announcement" hidden></p>
+          <h1 id="heroTitle" hidden></h1>
+          <p id="heroSubtitle" hidden></p>
+          <div class="metrics">
+            <span><b id="maxUploadLabel"></b> 单图限制</span>
+			<span><b id="batchLimitLabel"></b> 批量上限</span>
+            <span><b id="storagePill"></b> 默认存储</span>
+          </div>
+        </section>
+
+        <section class="upload-panel" aria-label="图片上传">
+          <div class="dropzone" id="dropzone" role="button" tabindex="0" aria-label="选择或拖入图片">
+            <input id="fileInput" type="file" accept="image/*,.avif,.bmp,.tif,.tiff,.ico,.svg,.heic,.heif,.jxl,.psd" multiple hidden />
+            <div class="capture-icon" aria-hidden="true">
+              <span></span><i></i><b></b>
+            </div>
+            <h2 id="dropTitle">拖入图片，或者点这里选择</h2>
+            <p id="fileMeta">支持批量选择与 Ctrl+V / Command+V 粘贴</p>
+          </div>
+
+          <div class="queue-panel" id="queuePanel" hidden>
+            <div class="queue-head">
+              <div>
+                <h2 id="queueTitle">上传队列</h2>
+                <p id="queueSummary">等待开始</p>
+              </div>
+              <div class="queue-tools">
+                <button class="primary-button compact" id="uploadButton" type="button" hidden>上传全部</button>
+                <div class="batch-copy" id="batchCopy" hidden>
+                  <select id="copyFormat" aria-label="批量复制格式">
+                    <option value="url">URL</option>
+                    <option value="markdown">Markdown</option>
+                    <option value="html">HTML</option>
+                    <option value="bbcode">BBCode</option>
+                  </select>
+                  <button class="ghost-button compact" id="copyAllButton" type="button">复制全部</button>
+                </div>
+                <button class="ghost-button compact" id="clearQueueButton" type="button">清空</button>
+              </div>
+            </div>
+            <div class="queue-list" id="queueList"></div>
+          </div>
+          <p class="message" id="uploadMessage" role="status"></p>
+        </section>
+      </main>
+
+      <footer id="footerText" hidden></footer>
+    </div>
+
+    <script src="/assets/album-icons.js?v=0.4.6" defer></script>
+    <script src="/assets/background.js?v=0.4.6" defer></script>
+    <script src="/assets/branding.js?v=0.4.6" defer></script>
+    <script src="/assets/design.js?v=0.4.6" defer></script>
+    <script src="/assets/account.js?v=0.4.6" defer></script>
+    <script src="/assets/app.js?v=0.4.6" defer></script>
+  </body>
+</html>

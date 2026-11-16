@@ -1,0 +1,58 @@
+.mail-tabs { display:flex; gap:24px; border-bottom:1px solid var(--line,#dfe5df); margin:0 0 28px; }
+.mail-tabs button { border:0; border-radius:0; background:none; padding:12px 0; color:var(--muted,#778077); border-bottom:2px solid transparent; }
+.mail-tabs button[aria-selected="true"] { color:var(--text,#202820); border-bottom-color:var(--accent,#486b28); }
+.mail-config { max-width:1040px; }
+html:root .ui-v4 [data-panel="mail"].admin-tab { min-width:0; grid-template-columns:minmax(0,1fr); }
+[data-mail-view] { min-width:0; }
+html:root .ui-v4 [data-panel="mail"] > .section-title { justify-content:space-between; margin-bottom:12px; }
+html:root .ui-v4 #mailMessage:empty { display:none; }
+html:root .ui-v4 .mail-config .section-title { justify-content:space-between; margin:24px 0; }
+.mail-config .form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px 28px; }
+.mail-config label,.mail-test-form label,.mail-filter { display:grid; gap:8px; min-width:0; }
+.mail-config .switch-line { display:flex; }
+.mail-config input,.mail-config select,.mail-test-form input { width:100%; min-width:0; }
+.mail-config .switch-line input { width:18px; }
+.mail-test-form { display:flex; align-items:end; flex-wrap:wrap; gap:16px; padding:28px 0; border-top:1px solid var(--line,#dfe5df); max-width:1040px; }
+.mail-test-form label { flex:1; min-width:180px; max-width:480px; }
+.mail-filter { max-width:280px; margin-bottom:24px; }
+.mail-jobs { overflow-x:auto; }
+.mail-table { width:100%; border-collapse:collapse; min-width:720px; font-size:14px; }
+.mail-table th,.mail-table td { text-align:left; padding:16px 12px; border-bottom:1px solid var(--line,#dfe5df); vertical-align:top; }
+.mail-table th { color:var(--muted,#778077); font-weight:500; }
+.mail-table small { display:block; max-width:320px; overflow-wrap:anywhere; margin-top:5px; }
+.mail-table td:last-child { white-space:nowrap; }
+.mail-table button + button { margin-left:8px; }
+.mail-template { white-space:pre-wrap; overflow-wrap:anywhere; font:inherit; line-height:1.9; border-left:3px solid var(--accent,#486b28); padding:12px 24px; }
+.account-mail { border-top:1px solid var(--line,#dfe5df); padding:24px 0; }
+.account-mail details { margin-top:18px; }
+.account-mail form,.forgot-mail form { display:grid; gap:16px; padding:16px 0; }
+.account-mail label,.forgot-mail label { display:grid; gap:8px; }
+.account-mail summary,.forgot-mail summary { cursor:pointer; }
+.mail-action-shell { width:min(100% - 40px,500px); margin:80px auto; }
+.mail-action-shell h1 { font-size:28px; margin:40px 0 24px; }
+.mail-action-shell form { display:grid; gap:20px; }
+.mail-action-shell label { display:grid; gap:8px; }
+.mail-action-shell input { min-width:0; width:100%; }
+.mail-action-shell > .message { margin:20px 0 0; line-height:1.7; }
+.mail-action-shell > .message:empty { display:none; }
+.mail-action-shell > a:not(.brand) { display:inline-flex; margin-top:20px; }
+.auth-links { display:flex; justify-content:space-between; gap:20px; padding-top:24px; }
+.mail-action-shell .brand { display:inline-flex; }
+#mailPasswordFields { display:grid; gap:20px; }
+#mailPasswordFields[hidden] { display:none; }
+.registration-captcha { display:grid; grid-template-columns:minmax(0,1fr) minmax(130px,.8fr); gap:16px; align-items:end; }
+.registration-captcha button { height:48px; white-space:nowrap; }
+.mail-template-workspace { display:grid; grid-template-columns:minmax(260px,.8fr) minmax(0,1.2fr); gap:32px; align-items:start; }
+#mailTemplateForm { display:grid; gap:18px; min-width:0; }
+#mailTemplateForm label,#registrationSettingsForm label { display:grid; gap:8px; min-width:0; }
+#mailTemplateForm input,#mailTemplateForm textarea { width:100%; min-width:0; }
+.mail-template-actions { display:flex; justify-content:flex-end; gap:12px; flex-wrap:wrap; }
+.mail-preview-pane { min-width:0; }
+.mail-preview-pane h3 { font-size:14px; overflow-wrap:anywhere; margin:0 0 12px; }
+#mailTemplatePreview { display:block; width:100%; height:720px; border:1px solid var(--line); border-radius:8px; background:#f5f7f3; }
+#registrationSettingsForm { display:grid; gap:24px; max-width:560px; }
+#registrationSettingsForm .switch-line { display:flex; justify-content:space-between; }
+.mail-tabs { overflow-x:auto; }
+.mail-tabs button { white-space:nowrap; }
+@media(max-width:1100px) { .mail-template-workspace { grid-template-columns:minmax(0,1fr); } #mailTemplatePreview { height:680px; } }
+@media(max-width:650px) { .mail-config .form-grid { grid-template-columns:1fr; } .mail-tabs { gap:18px; } .mail-tabs button { font-size:14px; } .mail-action-shell { margin:40px auto; } }

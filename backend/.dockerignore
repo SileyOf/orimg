@@ -1,0 +1,17 @@
+.git
+.env
+.env.*
+!.env.example
+data
+dist
+.gocache
+node_modules
+*.log
+installation.json
+installation.json.lock
+**/*.session-key
+**/.session-key-*
+static/assets/site-logo-*
+static/assets/site-background-*
+zhuapic
+.DS_Store

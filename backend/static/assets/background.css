@@ -1,0 +1,23 @@
+html:root body.ui-v4 { isolation: isolate; }
+.site-wallpaper { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; display: none; }
+[data-wallpaper] > .site-wallpaper { display: block; }
+.site-wallpaper img { width: 100%; height: 100%; object-fit: cover; transform: scale(1.06); filter: blur(var(--background-blur,0px)); }
+.site-wallpaper::after { content: ""; position: absolute; inset: 0; background: color-mix(in srgb, var(--page) var(--background-overlay,82%), transparent); }
+html:root .ui-v4[data-wallpaper] .admin-shell { background: transparent; }
+html:root .ui-v4[data-wallpaper] { --muted: #414d40; }
+html:root[data-theme="dark"] .ui-v4[data-wallpaper] { --muted: #d5dfd1; }
+@media (prefers-color-scheme: dark) { html:root:not([data-theme="light"]) .ui-v4[data-wallpaper] { --muted: #d5dfd1; } }
+@supports (backdrop-filter: blur(20px)) {
+  html:root[data-glass="clear"] .ui-v4[data-wallpaper] :is(.dropzone,.login-shell,.queue-item) { background: color-mix(in srgb, var(--panel) 90%, transparent) !important; backdrop-filter: blur(20px); }
+}
+html:root .ui-v4[data-wallpaper] .login-shell { background: var(--panel); padding: 28px; border: 1px solid var(--line); border-radius: 8px; }
+.background-preview { position: relative; display: grid; place-items: center; width: min(100%,680px); aspect-ratio: 16/5; overflow: hidden; border: 1px solid var(--line); border-radius: 6px; background: var(--soft); color: var(--muted); margin-bottom: 16px; }
+.background-preview img { width: 100%; height: 100%; object-fit: cover; position: absolute; inset: 0; }
+.background-ranges { margin-top: 20px; }
+.background-ranges label { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; }
+.background-ranges input { width: 100%; height: 28px; }
+.background-ranges output { color: var(--muted); font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-transparency: reduce) {
+  html:root[data-glass="clear"] .ui-v4[data-wallpaper] :is(.dropzone,.login-shell,.queue-item) { background: var(--panel) !important; backdrop-filter: none; }
+  .site-wallpaper::after { background: color-mix(in srgb, var(--page) 95%, transparent); }
+}

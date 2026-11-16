@@ -1,0 +1,88 @@
+html:root .ui-v4 .account-avatar { display: grid; place-items: center; width: 38px; height: 38px; min-width: 38px; padding: 0; border: 1px solid color-mix(in srgb, var(--green) 22%, var(--line)); border-radius: 50%; background: var(--accent); color: #141c14; font-size: 15px; font-weight: 650; cursor: pointer; transition: transform .18s, box-shadow .18s; }
+html:root .ui-v4 .account-avatar:hover, html:root .ui-v4 .account-avatar[aria-expanded="true"] { transform: translateY(-1px); box-shadow: 0 0 0 4px color-mix(in srgb, var(--green) 12%, transparent); }
+.account-menu { position: fixed; inset: auto; margin: 0; width: 256px; max-width: calc(100vw - 16px); max-height: calc(100dvh - 16px); overflow-y: auto; padding: 7px; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 16px 48px #0002; }
+.account-menu:popover-open { animation: account-enter .16s ease-out; }
+.account-identity { display: grid; gap: 4px; padding: 12px 10px 16px; }
+.account-identity strong { font-size: 14px; font-weight: 600; }
+.account-identity small { font-size: 11px; color: var(--muted); }
+.account-identity > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html:root .ui-v4 .account-menu :is(button,a) { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 40px; padding: 9px 10px; border: 0; border-radius: 5px; background: none; color: var(--ink); font: inherit; font-size: 13px; font-weight: 450; text-align: left; text-decoration: none; cursor: pointer; }
+html:root .ui-v4 .account-menu :is(button,a):hover, html:root .ui-v4 .account-menu :is(button,a):focus-visible { background: var(--soft); }
+.account-menu svg { width: 17px; height: 17px; flex: none; }
+.account-menu hr { height: 1px; border: 0; background: var(--line); margin: 6px 4px; }
+html:root .ui-v4 .account-menu .account-logout { color: #bd4343; }
+.auth-status { min-height: 80dvh; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); }
+.auth-spinner { width: 23px; height: 23px; border: 2px solid var(--line); border-top-color: var(--green); border-radius: 50%; animation: account-spin .9s linear infinite; }
+html:root .ui-v4 .account-dialog { padding: 0; width: min(660px, calc(100vw - 32px)); max-width: none; max-height: calc(100dvh - 48px); border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); box-shadow: 0 28px 100px #0003; }
+.account-dialog::backdrop { background: #141d244d; backdrop-filter: blur(5px); }
+.account-dialog[open] { animation: account-enter .2s ease-out; }
+.account-dialog-header { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between; padding: 18px 24px; border-bottom: 1px solid var(--line); background: var(--panel); }
+html:root .ui-v4 .account-dialog h2 { margin: 0; font-size: 18px; }
+.account-dialog-body { padding: 24px; }
+html:root .ui-v4 .account-dialog .settings-form { gap: 16px; }
+html:root .ui-v4 .account-dialog .settings-form > button { justify-self: start; width: auto; }
+html:root .ui-v4 .account-dialog :is(.account-policy-panel,.user-policy-summary,.api-token-section) { padding: 24px 0 0; margin: 24px 0 0; border: 0; border-top: 1px solid var(--line); border-radius: 0; background: none; }
+html:root .ui-v4 .account-dialog .inline-help { display: none; }
+html:root .ui-v4 .account-dialog :is(.account-policy-details,.token-create-form) { grid-template-columns: minmax(0,1fr) minmax(0,1fr); }
+.account-dialog .token-create-form button { justify-self: start; }
+.account-dialog input { min-width: 0; }
+.account-dialog .token-row { flex-wrap: wrap; }
+html:root .ui-v4 .user-overview { display: block; }
+html:root .ui-v4 .user-overview > .section-title { display: flex; justify-content: space-between; align-items: center; margin: 0 0 26px; }
+html:root .ui-v4 .dashboard-eyebrow { margin: 0 0 6px; font-size: 11px; color: var(--muted); }
+html:root .ui-v4 #dashboardGreeting { font-size: 26px; line-height: 1.4; overflow-wrap: anywhere; }
+html:root .ui-v4 .user-metrics { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 0; margin-bottom: 36px; padding: 24px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+html:root .ui-v4 .user-metrics article { display: grid; gap: 9px; padding: 0 24px; border: 0; border-right: 1px solid var(--line); border-radius: 0; background: none; }
+html:root .ui-v4 .user-metrics article:first-child { padding-left: 0; }
+html:root .ui-v4 .user-metrics article:last-child { border-right: 0; }
+html:root .ui-v4 .user-metrics strong { font-size: 32px; font-weight: 550; font-variant-numeric: tabular-nums; }
+html:root .ui-v4 .user-overview-grid { display: block; }
+html:root .ui-v4 .user-activity { padding: 0 0 30px; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: none; }
+html:root .ui-v4 .compact-heading h3 { font-size: 15px; font-weight: 550; }
+html:root .ui-v4 .user-activity-chart { grid-template-columns: repeat(14, minmax(0,1fr)); height: 172px; margin-top: 20px; gap: 14px; }
+html:root .ui-v4 .user-activity-chart .activity-column { min-width: 0; grid-template-columns: minmax(0,1fr); }
+html:root .ui-v4 .user-activity-chart .activity-column > div { border-radius: 0; background: none; border-bottom: 1px solid var(--line); }
+html:root .ui-v4 .user-activity-chart i { width: min(100%, 28px); min-height: 0; background: var(--ui-accent, var(--green)); border-radius: 3px 3px 0 0; transition: height .5s ease; }
+html:root .ui-v4 .user-activity-chart strong { font-size: 11px; font-weight: 450; }
+html:root .ui-v4 .user-activity-chart span { font-size: 10px; font-weight: 400; white-space: nowrap; }
+html:root .ui-v4 .account-dialog .account-policy-details { background: none; border: 0; border-radius: 0; }
+html:root .ui-v4 .account-dialog .account-policy-details > div { padding: 10px 0; border: 0; }
+html:root .ui-v4 .account-dialog .compact-section-title { flex-direction: row; align-items: center; }
+html:root .ui-v4 .account-dialog .soft-badge { width: auto; }
+html:root .ui-v4 .user-overview > .message:empty { display: none; }
+.recent-section { margin: 28px 0 36px; }
+.recent-images { display: grid; grid-template-columns: repeat(6,minmax(0,1fr)); gap: 16px; margin-top: 18px; }
+html:root .ui-v4 .recent-image { min-width: 0; padding: 0; border: 0; background: none; text-align: left; color: var(--ink); cursor: pointer; }
+.recent-image img { width: 100%; aspect-ratio: 4/3; object-fit: cover; display: block; border-radius: 6px; background: var(--soft); transition: transform .2s, box-shadow .2s; }
+.recent-image:hover img { transform: translateY(-3px); box-shadow: 0 8px 20px #0001; }
+.recent-image span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; margin-top: 8px; }
+html:root .ui-v4 .text-action { background: none; border: 0; padding: 4px 0; color: var(--green); font-size: 12px; text-decoration: none; cursor: pointer; }
+.recent-empty { color: var(--muted); font-size: 13px; }
+.recent-images:has(.recent-empty) { display: flex; gap: 20px; align-items: center; min-height: 80px; }
+@keyframes account-enter { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes account-spin { to { transform: rotate(360deg); } }
+@media (max-width: 700px) {
+  html:root .ui-v4 .dashboard-topbar { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 12px; }
+  html:root .ui-v4 .dashboard-topbar .top-actions { width: auto; margin-left: auto; flex-wrap: nowrap; gap: 8px; }
+  html:root .ui-v4 .dashboard-topbar .brand { flex: 1; overflow: hidden; }
+  html:root .ui-v4 .dashboard-topbar .brand span { min-width: 0; }
+  html:root .ui-v4 .dashboard-topbar .brand strong { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  html:root .ui-v4 .dashboard-topbar .brand small { display: none; }
+  html:root .ui-v4 .user-overview > .section-title { flex-direction: row; text-align: left; }
+  html:root .ui-v4 .user-metrics { grid-template-columns: repeat(2,minmax(0,1fr)); row-gap: 22px; }
+  html:root .ui-v4 .user-metrics article { padding: 0 16px; border: 0; }
+  html:root .ui-v4 .user-metrics article:nth-child(odd) { padding-left: 0; border-right: 1px solid var(--line); }
+  html:root .ui-v4 #dashboardGreeting { font-size: 22px; }
+  html:root .ui-v4 .user-activity-chart { gap: 5px; height: 140px; }
+  html:root .ui-v4 .user-activity-chart span { width: 36px; justify-self: center; visibility: hidden; }
+  html:root .ui-v4 .user-activity-chart .activity-column:nth-child(3n + 1) span { visibility: visible; }
+  .recent-images { grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px; }
+  .account-dialog-body { padding: 18px; }
+  html:root .ui-v4 .account-dialog :is(.account-policy-details,.token-create-form) { grid-template-columns: minmax(0,1fr); }
+}
+@media (prefers-reduced-motion: reduce) { .account-menu,.account-dialog[open],.auth-spinner { animation: none; } .recent-image img { transition: none; } }
+html[data-motion="reduced"] :is(.account-menu,.account-dialog[open],.auth-spinner) { animation: none; }
+html[data-motion="reduced"] .recent-image img { transition: none; }
+.account-avatar img, .user-avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: inherit; display: block; }
+.profile-avatar-editor { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding-block: 0 20px; }
+.profile-avatar-editor .user-avatar { width: 64px; height: 64px; flex: 0 0 64px; display: grid; place-items: center; border-radius: 50%; background: var(--accent-soft); font-size: 24px; overflow: hidden; }

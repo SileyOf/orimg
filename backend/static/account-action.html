@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="referrer" content="no-referrer" />
+  <title>账号验证</title>
+  <link rel="stylesheet" href="/assets/background.css?v=0.4.6">
+  <script src="/assets/appearance.js?v=0.4.6"></script>
+  <link rel="icon" href="/assets/favicon.svg?v=0.4.6" />
+  <link rel="stylesheet" href="/assets/styles.css?v=0.4.6" />
+  <link rel="stylesheet" href="/assets/design.css?v=0.4.6" />
+  <link rel="stylesheet" href="/assets/appearance.css?v=0.4.6" />
+  <link rel="stylesheet" href="/assets/mail.css?v=0.4.6" />
+</head>
+<body class="ui-v4" data-page-title="账号验证" data-brand-pending>
+  <main class="mail-action-shell">
+    <a class="brand" href="/"><img class="brand-logo" src="/assets/logo.svg" alt="" /><strong data-site-name></strong></a>
+    <h1 id="mailActionTitle">账号验证</h1>
+    <form id="mailActionForm">
+      <label id="registrationName" hidden>用户名<input name="username" minlength="3" maxlength="80" pattern="[a-zA-Z0-9_.\-]{3,80}" title="3 至 80 位字母、数字、下划线、短横线或点" autocomplete="username" /></label>
+      <div id="mailPasswordFields" hidden>
+        <label>新密码<input name="password" type="password" minlength="10" maxlength="128" autocomplete="new-password" /></label>
+        <label>确认密码<input name="confirm_password" type="password" minlength="10" maxlength="128" autocomplete="new-password" /></label>
+      </div>
+      <button class="primary-button" type="submit">确认</button>
+    </form>
+    <p id="mailActionMessage" class="message" role="status"></p>
+    <a href="/dashboard">返回用户中心</a>
+  </main>
+  <script src="/assets/album-icons.js?v=0.4.6" defer></script><script src="/assets/background.js?v=0.4.6" defer></script><script src="/assets/branding.js?v=0.4.6" defer></script><script src="/assets/design.js?v=0.4.6" defer></script><script src="/assets/account-mail.js?v=0.4.6" defer></script>
+</body>
+</html>

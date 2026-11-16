@@ -1,0 +1,611 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <script src="/assets/appearance.js?v=0.4.6"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>管理后台</title>
+    <link rel="icon" href="/assets/favicon.svg?v=0.4.6" />
+    <link rel="stylesheet" href="/assets/styles.css?v=0.4.6" />
+    <link rel="stylesheet" href="/assets/album.css?v=0.4.6" />
+    <link rel="stylesheet" href="/assets/design.css?v=0.4.6" />
+    <link rel="stylesheet" href="/assets/appearance.css?v=0.4.6" />
+    <link rel="stylesheet" href="/assets/background.css?v=0.4.6" />
+    <link rel="stylesheet" href="/assets/account.css?v=0.4.6" />
+    <link rel="stylesheet" href="/assets/responsive.css?v=0.4.6" />
+    <link rel="stylesheet" href="/assets/storage-targets.css?v=0.4.6" />
+    <link rel="stylesheet" href="/assets/mail.css?v=0.4.6" />
+  </head>
+  <body class="admin-page ui-v4" data-brand-pending>
+    <div class="auth-status" id="authStatus" role="status"><span class="auth-spinner" aria-hidden="true"></span><p id="authStatusText">正在确认登录状态</p><button class="ghost-button compact" id="retrySession" type="button" hidden>重试</button></div>
+    <div class="login-shell" id="loginShell" hidden>
+      <a class="brand" href="/">
+        <img class="brand-logo" src="/assets/logo.svg" alt="" />
+        <span>
+          <strong data-site-name></strong>
+          <small>存储、用户、安全、图库</small>
+        </span>
+      </a>
+      <form class="login-form" id="loginForm">
+        <label>
+          邮箱
+          <input name="email" type="email" autocomplete="email" placeholder="管理员邮箱" />
+        </label>
+        <label>
+          密码
+          <input name="password" type="password" autocomplete="current-password" />
+        </label>
+        <div class="form-grid captcha-row">
+          <label>
+            验证
+            <input name="captcha_answer" autocomplete="off" />
+          </label>
+          <div class="captcha-box">
+            <strong id="captchaQuestion">...</strong>
+            <button class="ghost-button compact" id="refreshCaptcha" type="button">刷新</button>
+          </div>
+        </div>
+        <button class="primary-button" type="submit">登录</button>
+      </form>
+      <p class="message" id="loginMessage"></p>
+    </div>
+
+    <div class="admin-layout" id="adminLayout" hidden>
+      <main class="admin-shell">
+        <aside class="admin-side">
+          <a class="brand" href="/">
+            <img class="brand-logo" src="/assets/logo.svg" alt="" />
+            <span>
+              <strong id="adminBrandName"></strong>
+              <small id="adminBrandSubtitle" hidden></small>
+            </span>
+          </a>
+          <nav class="admin-nav" aria-label="后台导航">
+            <button class="active" data-panel="overview" type="button">概览</button>
+            <button data-panel="storage" type="button">存储</button>
+            <button data-panel="tasks" type="button">后台任务</button>
+            <button data-panel="mail" type="button">邮件</button>
+            <button data-panel="site" type="button">页面</button>
+            <button data-panel="security" type="button">安全</button>
+            <button data-panel="audit" type="button">审计日志</button>
+            <button data-panel="groups" type="button">用户组</button>
+            <button data-panel="users" type="button">用户</button>
+            <button data-panel="images" type="button">图库</button>
+            <button data-panel="trash" type="button">回收站</button>
+          </nav>
+        </aside>
+
+        <section class="admin-main">
+          <div class="admin-toolbar">
+            <div>
+              <span class="admin-kicker" id="adminBadge" hidden></span>
+              <h1 id="panelTitle">系统概览</h1>
+              <p id="panelSubtitle">上传、用户、容量和存储副本的实时状态。</p>
+            </div>
+            <div class="top-actions">
+              <span class="status-pill" id="s3Status" hidden></span>
+              <a class="ghost-button" id="dashboardLink" href="/dashboard" hidden>用户后台</a>
+              <a class="ghost-button" href="/">上传页</a>
+              <div id="accountSlot"></div>
+            </div>
+          </div>
+
+          <section class="admin-panel admin-tab overview-panel" data-panel="overview">
+            <div class="section-title">
+              <div>
+                <h2>运行概览</h2>
+                <p class="inline-help">统计仅包含未进入回收站的图片。</p>
+              </div>
+              <button class="ghost-button compact" id="reloadDashboard" type="button">刷新</button>
+            </div>
+            <div class="overview-metrics">
+              <article><span>有效图片</span><strong id="metricImages">--</strong><small id="metricImageBytes">正在读取</small></article>
+              <article><span>今日上传</span><strong id="metricToday">--</strong><small id="metricTodayBytes">正在读取</small></article>
+              <article><span>活跃用户</span><strong id="metricUsers">--</strong><small id="metricUsersTotal">正在读取</small></article>
+              <article><span>副本异常</span><strong id="metricReplicaErrors">--</strong><small id="metricReplicaPending">正在读取</small></article>
+            </div>
+            <div class="runtime-strip">
+              <div><span>数据库连接</span><strong id="metricDBConnections">--</strong><small id="metricDBWait">连接池</small></div>
+              <div><span>后台任务</span><strong id="metricJobs">--</strong><small id="metricJobsQueued">队列</small></div>
+              <div><span>版本</span><strong id="metricVersion">v0.3</strong><small>当前运行版本</small></div>
+            </div>
+            <section class="overview-activity">
+              <div class="section-title compact-section-title">
+                <div><h3>近 7 天上传</h3><p class="inline-help">按上传完成时间统计。</p></div>
+              </div>
+              <div class="activity-chart" id="activityChart"></div>
+            </section>
+          </section>
+
+          <section class="admin-tab storage-workspace" data-panel="storage" hidden>
+            <header class="target-toolbar"><div><h2>存储空间</h2><p id="targetSummary">正在读取</p></div><button class="primary-button" type="button" id="addStorageTarget">新增存储</button></header>
+            <div id="targetNotice" role="status" hidden></div>
+            <section class="cache-overview" aria-labelledby="cacheTitle">
+              <header class="target-toolbar"><div><h3 id="cacheTitle">S3 本地读取缓存</h3><p>临时缓存 · 不计入永久副本</p></div><button class="icon-button" id="refreshCache" type="button" title="刷新缓存统计" aria-label="刷新缓存统计"></button></header>
+              <div class="cache-metrics"><div><small>缓存占用</small><strong id="cacheBytes">--</strong><span id="cacheFiles">--</span></div><div><small>已过期待清理</small><strong id="cacheExpired">--</strong><span id="cacheExpiredFiles">--</span></div><div><small>保留时间</small><strong id="cacheTTL">--</strong><span id="cacheCleanup">--</span></div></div>
+              <div class="cache-location"><span>本地目录</span><code id="cacheDirectory">--</code></div>
+              <p id="cacheMessage" role="status">正在读取缓存统计</p>
+              <details id="cacheDetails"><summary>占用最大的缓存文件（最多 20 项）</summary><div class="cache-file-table"><table><thead><tr><th>文件</th><th>大小</th><th>过期时间</th></tr></thead><tbody id="cacheFilesBody"></tbody></table></div></details>
+            </section>
+            <div class="catalog-tools" id="storageViewTools">
+              <input type="search" data-catalog-search placeholder="搜索存储名称、地址" aria-label="搜索存储" />
+              <select data-catalog-filter aria-label="筛选存储"><option value="">全部状态</option><option value="enabled">已启用</option><option value="paused">已暂停</option><option value="failed">有异常</option></select>
+              <span data-catalog-count></span><div data-view-switch role="group" aria-label="存储查看方式"></div>
+            </div>
+            <div class="target-inventory" id="storageTargets"></div>
+            <p class="catalog-empty" id="storageTargetsEmpty" hidden>没有匹配的存储</p>
+            <section class="backup-plan">
+              <h3>上传与备份</h3>
+              <div class="backup-flow"><div><small>默认上传位置</small><strong id="primaryTargetName">沿用原上传策略</strong></div><span aria-hidden="true">→</span><div><small>新图片自动备份到</small><strong id="backupTargetNames">未启用</strong></div></div>
+              <a href="#tasks" class="target-task-link">查看后台任务</a>
+            </section>
+            <details class="storage-runtime-settings"><summary>运行设置</summary>
+          <form class="settings-form" id="storageForm">
+            <div class="panel-heading">
+              <div>
+                <h3>磁盘与后台服务</h3>
+              </div>
+            </div>
+
+            <section class="storage-command-center" aria-label="存储状态">
+              <div class="storage-health-grid">
+                <article class="storage-health-card local-health">
+                  <span>Local</span>
+                  <strong id="localReplicaCount">--</strong>
+                  <small id="localReplicaSize">正在读取</small>
+                </article>
+                <article class="storage-health-card s3-health">
+                  <span>S3</span>
+                  <strong id="s3ReplicaCount">--</strong>
+                  <small id="s3ReplicaSize">正在读取</small>
+                </article>
+                <article class="storage-health-card sync-health">
+                  <span>同步队列</span>
+                  <strong id="replicaPendingCount">--</strong>
+                  <small id="replicaFailureCount">等待状态</small>
+                </article>
+                <article class="storage-health-card disk-health">
+                  <span>本地磁盘</span>
+                  <strong id="diskUsageValue">--</strong>
+                  <small id="diskUsageLimit">安全线 85%</small>
+                </article>
+              </div>
+            </section>
+
+            <section class="config-section">
+              <h3>缓存与缩略图</h3>
+              <div class="form-grid">
+                <label>
+                  S3 缓存目录
+                  <input name="s3_cache_dir" />
+                </label>
+                <label>
+                  缩略图目录
+                  <input name="thumb_dir" />
+                </label>
+              </div>
+            </section>
+
+            <section class="config-section">
+              <h3>上传与保留限制</h3>
+              <div class="form-grid">
+                <label>
+                  最大 MB
+                  <input name="max_upload_mb" type="number" min="1" max="200" />
+                </label>
+                <label>
+                  缓存天数
+                  <input name="cache_ttl_days" type="number" min="1" max="365" />
+                </label>
+              </div>
+              <div class="form-grid three">
+                <label>
+                  磁盘停止线 %
+                  <input name="disk_stop_percent" type="number" min="50" max="99" />
+                </label>
+                <label>
+                  回收站天数
+                  <input name="recycle_bin_days" type="number" min="1" max="30" />
+                </label>
+                <label class="switch-line worker-switch">
+                  <span>副本工作器</span>
+                  <input name="replica_worker_enabled" type="checkbox" />
+                </label>
+              </div>
+              <label>
+                允许格式
+                <input name="allowed_types" />
+              </label>
+            </section>
+
+            <section class="config-section">
+              <div class="section-title compact-section-title">
+                <div>
+                  <h3>MySQL 逻辑备份</h3>
+                  <p class="inline-help">完整数据库压缩备份。包含账号及加密配置，不包含图片原文件。备份存储必须保持私有。</p>
+                </div>
+                <button class="ghost-button compact" id="runDatabaseBackup" type="button">立即备份</button>
+              </div>
+              <div class="form-grid three">
+                <label>备份存储<select name="db_backup_target_id" id="databaseBackupTarget"><option value="0">原 S3 存储（兼容旧配置）</option></select></label>
+                <label class="switch-line worker-switch">
+                  <span>每日自动备份</span>
+                  <input name="db_backup_enabled" type="checkbox" />
+                </label>
+                <label>
+                  执行小时（0-23）
+                  <input name="db_backup_hour" type="number" min="0" max="23" />
+                </label>
+                <label>
+                  备份子目录
+                  <input name="db_backup_s3_prefix" placeholder="backups/database" />
+                </label>
+              </div>
+              <label>
+                mysqldump 路径
+                <input name="mysqldump_path" placeholder="mysqldump" />
+              </label>
+            </section>
+
+            <button class="primary-button" type="submit">保存运行设置</button>
+          </form>
+            </details>
+          </section>
+
+          <section class="admin-panel admin-tab" data-panel="tasks" hidden>
+            <section class="target-task-section"><h2>多地副本</h2><div id="targetTasks"></div></section>
+            <div class="section-title">
+              <div>
+                <h2>后台任务</h2>
+                <p class="inline-help">副本任务从存储页创建；邮件发送记录位于邮件页。</p>
+              </div>
+              <button class="ghost-button compact" id="reloadStorage" type="button">刷新</button>
+            </div>
+            <div class="task-history-heading"><div><h3>任务记录</h3><p>副本任务可恢复执行；中断的数据库备份需要重新运行。</p></div></div>
+            <div class="storage-jobs" id="storageJobs">
+              <div class="storage-job-empty">暂无副本同步、校验或备份任务</div>
+            </div>
+          </section>
+
+          <section class="admin-panel admin-tab" data-panel="mail" hidden>
+            <div class="section-title"><h2>邮件服务</h2><button id="mailRefresh" class="ghost-button compact" type="button">刷新</button></div>
+            <p id="mailMessage" class="message" role="status"></p>
+            <div class="mail-tabs" role="tablist" aria-label="邮件管理">
+              <button type="button" role="tab" aria-selected="true" data-mail-tab="config">发信配置</button>
+              <button type="button" role="tab" aria-selected="false" data-mail-tab="logs">发送记录</button>
+              <button type="button" role="tab" aria-selected="false" data-mail-tab="templates">邮件模板</button>
+              <button type="button" role="tab" aria-selected="false" data-mail-tab="registration">邮箱注册</button>
+            </div>
+            <section data-mail-view="config">
+              <form id="mailConfigForm" class="mail-config">
+                <div class="section-title"><h3>SMTP</h3><label class="switch-line"><span>开启正式发信</span><input name="enabled" type="checkbox" /></label></div>
+                <div class="form-grid two">
+                  <label>服务器<input name="host" required autocomplete="off" placeholder="smtp.example.com" /></label>
+                  <label>端口<input name="port" required type="number" min="1" max="65535" value="465" /></label>
+                  <label>连接安全<select name="tls"><option value="tls">TLS</option><option value="starttls">STARTTLS</option></select></label>
+                  <label>登录账号<input name="username" autocomplete="off" /></label>
+                  <label>SMTP 密码<input name="password" type="password" autocomplete="new-password" placeholder="留空保留已有密码" /></label>
+                  <label>发件邮箱<input name="from" required type="email" /></label>
+                  <label>发件人名称<input name="name" required maxlength="100" /></label>
+                  <label>验证链接域名<input name="base_url" required type="url" placeholder="https://img.example.com" /></label>
+                </div>
+                <div class="section-title"><span id="mailTestState" role="status">尚未测试</span><button class="primary-button compact" type="submit">保存邮件设置</button></div>
+              </form>
+              <form id="mailTestForm" class="mail-test-form"><label>测试收件邮箱<input name="email" required type="email" autocomplete="email" /></label><button class="ghost-button" type="submit">发送测试邮件</button></form>
+            </section>
+            <section data-mail-view="logs" hidden>
+              <label class="mail-filter">发送状态<select id="mailStatusFilter"><option value="">全部</option><option value="queued">等待发送</option><option value="sending">发送中</option><option value="accepted">服务器已接收</option><option value="failed">发送失败</option><option value="cancelled">已取消</option><option value="expired">已过期</option></select></label>
+              <div id="mailJobs" class="mail-jobs" aria-live="polite"></div>
+              <button id="mailMore" type="button" class="ghost-button compact" hidden>加载更多</button>
+            </section>
+            <section data-mail-view="templates" hidden>
+              <label class="mail-filter">邮件类型<select id="mailTemplate"><option value="verify">验证邮箱</option><option value="register">注册账号</option><option value="reset">重设密码</option><option value="change">确认新邮箱</option><option value="security">安全通知</option><option value="test">测试邮件</option></select></label>
+              <div class="mail-template-workspace">
+                <form id="mailTemplateForm">
+                  <label>邮件主题<input name="subject" required maxlength="200"></label>
+                  <label>标题<input name="title" required maxlength="200"></label>
+                  <label>正文<textarea name="body" required maxlength="4000" rows="7"></textarea></label>
+                  <label>按钮文字<input name="button" maxlength="200"></label>
+                  <label>页脚<textarea name="footer" maxlength="500" rows="3"></textarea></label>
+                  <p class="inline-help">变量：{{site_name}} 为发件人名称，{{message}} 为本次操作说明。安全链接和有效期由系统生成。</p>
+                  <div class="mail-template-actions"><button id="mailPreviewButton" type="button" class="ghost-button">更新预览</button><button type="submit" class="primary-button">保存模板</button></div>
+                  <p id="mailTemplateMessage" class="message" role="status"></p>
+                </form>
+                <div class="mail-preview-pane"><h3 id="mailPreviewSubject">邮件预览</h3><iframe id="mailTemplatePreview" title="邮件内容预览" sandbox="allow-same-origin" referrerpolicy="no-referrer"></iframe></div>
+              </div>
+            </section>
+            <section data-mail-view="registration" hidden>
+              <form id="registrationSettingsForm" class="mail-config">
+                <label class="switch-line"><span>开放邮箱注册</span><input name="enabled" type="checkbox"></label>
+                <label>注册后加入用户组<select name="group_id" required><option value="0">不分配</option></select></label>
+                <button type="submit" class="primary-button">保存注册设置</button>
+                <p id="registrationSettingsMessage" class="message" role="status"></p>
+              </form>
+            </section>
+          </section>
+
+          <form class="admin-panel settings-form admin-tab" id="siteForm" data-panel="site" hidden>
+            <h2>页面外观</h2>
+            <section class="config-section">
+              <h3>公开页面</h3>
+              <div class="brand-editor">
+                <img class="brand-logo preview-logo" id="logoPreview" src="/assets/logo.svg" alt="" />
+                <div>
+                  <label>
+                    Logo URL
+                    <input name="site_logo_url" placeholder="/assets/logo.svg" />
+                  </label>
+                  <div class="logo-upload-row">
+                    <input id="logoFileInput" type="file" accept="image/svg+xml,image/png,image/jpeg,image/webp,image/avif,image/x-icon" hidden />
+                    <button class="ghost-button compact" id="chooseLogoButton" type="button">上传 Logo</button>
+                    <span class="inline-help" id="logoUploadStatus">支持 SVG、PNG、JPG、WebP、AVIF、ICO，最大 2MB。</span>
+                  </div>
+                </div>
+              </div>
+              <label>
+                站点名称
+                <input name="site_name" />
+              </label>
+              <label>
+                默认强调色
+                <select name="default_accent_color">
+                  <option value="lime">青柠</option><option value="blue">蓝色</option>
+                  <option value="purple">紫色</option><option value="pink">粉色</option>
+                  <option value="red">红色</option><option value="orange">橙色</option>
+                  <option value="yellow">黄色</option><option value="green">绿色</option>
+                  <option value="graphite">石墨</option>
+                </select>
+              </label>
+              <label>
+                副标题
+                <input name="site_tagline" />
+              </label>
+              <label>
+                主标题
+                <input name="hero_title" />
+              </label>
+              <label>
+                说明文字
+                <textarea name="hero_subtitle" rows="3"></textarea>
+              </label>
+              <label>
+                公告
+                <input name="announcement" />
+              </label>
+              <label>
+                页脚
+                <input name="footer_text" />
+              </label>
+              <div class="form-grid three">
+                <label>
+                  后台名称
+                  <input name="admin_brand_name" />
+                </label>
+                <label>
+                  后台副标题
+                  <input name="admin_brand_subtitle" />
+                </label>
+                <label>
+                  后台标识
+                  <input name="admin_badge_text" />
+                </label>
+              </div>
+			  <div class="form-grid two">
+                <label>
+                  用户后台路径
+                  <input name="user_path" placeholder="/dashboard" />
+                </label>
+                <label>
+                  管理后台路径
+                  <input name="admin_path" placeholder="/admin" />
+                </label>
+              </div>
+              <label>
+                站点域名白名单
+                <input name="site_domains" placeholder="images.example.com, cdn.example.com" />
+                <span class="inline-help">多个域名用逗号分隔；图片链接会采用用户当前访问的白名单域名。</span>
+              </label>
+            </section>
+
+            <section class="config-section background-editor">
+              <h3>背景</h3>
+              <div class="background-preview"><img id="backgroundPreview" alt="背景预览" hidden /><span id="backgroundEmpty">未设置背景</span></div>
+              <label>图片 URL<input name="background_url" type="text" placeholder="https://example.com/background.jpg" /></label>
+              <div class="logo-upload-row">
+                <input id="backgroundFile" type="file" accept="image/jpeg,image/png" hidden />
+                <button id="chooseBackground" type="button" class="ghost-button compact">上传背景</button>
+                <button id="previewBackground" type="button" class="ghost-button compact">预览</button>
+                <button id="clearBackground" type="button" class="ghost-button compact">移除背景</button>
+                <span class="inline-help">JPG / PNG · 最大 8MB</span>
+              </div>
+              <div class="form-grid two background-ranges">
+                <label>遮罩强度 <output id="backgroundOverlayValue">82%</output><input name="background_overlay" type="range" min="75" max="95" value="82" /></label>
+                <label>背景模糊 <output id="backgroundBlurValue">0px</output><input name="background_blur" type="range" min="0" max="20" value="0" /></label>
+              </div>
+              <p class="message" id="backgroundMessage" role="status"></p>
+            </section>
+            <button class="primary-button" type="submit">保存页面设置</button>
+          </form>
+
+          <form class="admin-panel settings-form admin-tab" id="securityForm" data-panel="security" hidden>
+            <div class="panel-heading">
+              <div>
+                <h2>页面安全</h2>
+                <p>控制游客入口、登录防护和接口限流。用户组的上传配额在“用户组”中配置。</p>
+              </div>
+            </div>
+            <section class="config-section">
+              <label class="switch-line">
+                <span>允许游客上传</span>
+                <input name="public_upload_enabled" type="checkbox" />
+              </label>
+              <label class="switch-line">
+                <span>登录验证码</span>
+                <input name="login_captcha_enabled" type="checkbox" />
+              </label>
+              <div class="form-grid three">
+                <label>登录 / 分钟<input name="login_rate_per_min" type="number" min="1" max="300" /></label>
+                <label>上传 / 分钟<input name="upload_rate_per_min" type="number" min="1" max="1000" /></label>
+                <label>图片访问 / 分钟<input name="image_rate_per_min" type="number" min="30" max="5000" /></label>
+              </div>
+            </section>
+            <button class="primary-button" type="submit">保存安全设置</button>
+          </form>
+
+          <section class="admin-panel admin-tab" data-panel="audit" hidden>
+            <div class="section-title">
+              <div><h2>审计日志</h2><p class="inline-help">记录登录、配置、用户、Token、图片和存储任务等关键操作。</p></div>
+              <div class="top-actions">
+                <select id="auditActionFilter" aria-label="操作类型">
+                  <option value="">全部操作</option>
+                  <option value="auth.login">登录</option>
+                  <option value="settings.updated">设置更新</option>
+                  <option value="user.updated">用户更新</option>
+                  <option value="images.bulk_deleted">批量删除</option>
+                  <option value="storage_job.created">存储任务</option>
+                </select>
+                <button class="ghost-button compact" id="reloadAudit" type="button">刷新</button>
+              </div>
+            </div>
+            <div class="audit-list" id="auditList"></div>
+            <button class="ghost-button album-load-more" id="loadMoreAudit" type="button" hidden>加载更多</button>
+          </section>
+
+          <section class="admin-panel admin-tab" data-panel="groups" hidden>
+            <div class="section-title">
+              <div>
+                <h2>用户组与上传策略</h2>
+              </div>
+              <div class="top-actions">
+                <button class="primary-button compact" id="showGroupCreator" type="button">新建用户组</button>
+                <button class="ghost-button compact" id="reloadGroups" type="button">刷新</button>
+              </div>
+            </div>
+            <form class="guest-group-settings" id="guestGroupForm">
+              <label><span>游客用户组</span><select id="guestGroupSelect" aria-label="游客用户组"></select></label>
+              <button class="ghost-button compact" type="submit">保存</button>
+            </form>
+            <form class="group-create-bar" id="groupCreateForm" hidden>
+              <label><span>用户组名称</span><input name="name" maxlength="80" placeholder="例如 创作者" /></label>
+              <label><span>复制策略自</span><select name="copy_from_group_id" id="groupPolicySource"></select></label>
+              <button class="primary-button compact" type="submit">创建</button>
+              <button class="ghost-button compact" id="cancelGroupCreator" type="button">取消</button>
+            </form>
+            <div class="catalog-tools" id="groupViewTools">
+              <input type="search" data-catalog-search placeholder="搜索用户组、存储" aria-label="搜索用户组" />
+              <select data-catalog-filter aria-label="筛选用户组"><option value="">全部用户组</option><option value="enabled">已启用</option><option value="paused">已停用</option></select>
+              <span data-catalog-count></span><div data-view-switch role="group" aria-label="用户组查看方式"></div>
+            </div>
+            <div class="policy-grid group-catalog" id="groupsGrid"></div>
+            <p class="catalog-empty" id="groupsGridEmpty" hidden>没有匹配的用户组</p>
+          </section>
+
+          <section class="admin-panel admin-tab" data-panel="users" hidden>
+            <div class="section-title">
+              <div><h2>用户管理</h2><p class="inline-help">列表用于快速浏览，账号资料和权限集中在编辑窗口中修改。</p></div>
+              <div class="top-actions">
+                <button class="primary-button compact" id="createUserButton" type="button">新增用户</button>
+                <button class="ghost-button compact" id="reloadUsers" type="button">刷新</button>
+              </div>
+            </div>
+            <form class="image-filter-bar user-filter-bar" id="userFilterForm">
+              <label class="search-field"><span>搜索</span><input id="userSearch" placeholder="用户名或邮箱" /></label>
+              <label><span>用户组</span><select id="userGroupFilter"><option value="">全部</option></select></label>
+              <label><span>状态</span><select id="userActiveFilter"><option value="">全部</option><option value="true">已启用</option><option value="false">已停用</option></select></label>
+              <button class="primary-button compact" type="submit">筛选</button>
+              <button class="ghost-button compact" id="resetUserFilter" type="button">重置</button>
+            </form>
+            <div class="users-table" id="usersTable"></div>
+            <button class="ghost-button load-more" id="loadMoreUsers" type="button" hidden>加载更多用户</button>
+          </section>
+
+          <section class="admin-panel admin-tab" data-panel="images" hidden>
+            <div class="section-title">
+              <div>
+                <h2>全部图片</h2>
+                <p class="inline-help">管理员可查看自己的图片或全站图片。</p>
+              </div>
+              <div class="top-actions">
+                <select id="imageScope">
+                  <option value="all">全部图片</option>
+                  <option value="mine">我的图片</option>
+                </select>
+                <button class="ghost-button compact" id="reloadImages" type="button">刷新</button>
+              </div>
+            </div>
+            <form class="image-filter-bar admin-image-filter" id="adminImageFilterForm">
+              <label class="search-field"><span>搜索</span><input id="adminImageSearch" placeholder="文件名、图片 ID、用户或邮箱" /></label>
+              <label><span>存储</span><select id="adminImageStorage"><option value="">全部</option><option value="local">Local</option><option value="s3">S3</option><option value="mirror">Mirror</option></select></label>
+              <label><span>从</span><input id="adminImageFrom" type="date" /></label>
+              <label><span>到</span><input id="adminImageTo" type="date" /></label>
+              <button class="primary-button compact" type="submit">筛选</button>
+              <button class="ghost-button compact" id="resetAdminImageFilter" type="button">重置</button>
+            </form>
+            <div class="image-selection-bar" id="adminImageSelectionBar" hidden>
+              <strong><span id="adminSelectedImageCount">0</span> 张已选择</strong>
+              <div>
+                <button class="ghost-button compact" id="copyAdminSelected" type="button">复制链接</button>
+                <button class="danger-button compact" id="deleteAdminSelected" type="button">移至回收站</button>
+                <button class="ghost-button compact" id="clearAdminSelection" type="button">取消选择</button>
+              </div>
+            </div>
+            <div class="album-grid" id="adminImages"></div>
+            <button class="ghost-button album-load-more" id="loadMoreAdminImages" type="button" hidden>加载更多</button>
+          </section>
+
+          <section class="admin-panel admin-tab" data-panel="trash" hidden>
+            <div class="section-title">
+              <div>
+                <h2>回收站</h2>
+                <p class="inline-help">删除的图片暂时停止访问，到期后从 Local、S3 和缩略图目录中清除。</p>
+              </div>
+              <button class="ghost-button compact" id="reloadTrash" type="button">刷新</button>
+            </div>
+            <div class="trash-list" id="trashImages"></div>
+          </section>
+
+          <p class="message" id="adminMessage"></p>
+        </section>
+      </main>
+    </div>
+
+
+    <div class="editor-modal" id="userEditor" hidden>
+      <button class="editor-modal-backdrop" id="userEditorBackdrop" type="button" aria-label="关闭"></button>
+      <form class="editor-dialog" id="userEditorForm">
+        <div class="editor-dialog-head">
+          <div><span id="userEditorEyebrow">用户</span><h2 id="userEditorTitle">新增用户</h2><p id="userEditorSubtitle">创建登录账号并分配用户组。</p></div>
+          <button class="icon-button" id="userEditorClose" type="button" aria-label="关闭">×</button>
+        </div>
+        <input name="id" type="hidden" />
+        <div class="editor-form-grid">
+          <label>用户名<input name="username" maxlength="80" placeholder="显示名称" /></label>
+          <label>登录邮箱<input name="email" type="email" autocomplete="email" placeholder="user@example.com" /></label>
+          <label>角色<select name="role"><option value="user">普通用户</option><option value="admin">管理员</option></select></label>
+          <label>用户组<select name="group_id" id="userEditorGroup"></select></label>
+          <label>个人容量<select name="quota_mode"><option value="inherit">跟随用户组</option><option value="custom">自定义容量</option><option value="unlimited">不限容量</option></select></label>
+          <label>容量 GB<input name="quota_gb" type="number" min="0.000001" max="102400" step="any" value="5" required disabled /></label>
+          <label class="editor-password-field">密码<input name="password" type="password" autocomplete="new-password" /><span class="inline-help" id="userPasswordHelp">新用户至少 6 位</span></label>
+          <label class="switch-line editor-active"><span>允许登录</span><input name="active" type="checkbox" checked /></label>
+        </div>
+        <div class="editor-dialog-actions">
+          <button class="danger-button compact" id="userEditorDelete" type="button" hidden>删除用户</button>
+          <span class="editor-action-spacer"></span>
+          <button class="ghost-button compact" id="userEditorCancel" type="button">取消</button>
+          <button class="primary-button compact" type="submit">保存用户</button>
+        </div>
+      </form>
+    </div>
+
+    <script src="/assets/album-icons.js?v=0.4.6" defer></script>
+    <script src="/assets/background.js?v=0.4.6" defer></script>
+    <script src="/assets/branding.js?v=0.4.6" defer></script>
+    <script src="/assets/design.js?v=0.4.6" defer></script>
+    <script src="/assets/album.js?v=0.4.6" defer></script>
+    <script src="/assets/account.js?v=0.4.6" defer></script>
+    <script src="/assets/catalog-views.js?v=0.4.6" defer></script>
+    <script src="/assets/storage-targets.js?v=0.4.6" defer></script>
+    <script src="/assets/mail-admin.js?v=0.4.6" defer></script>
+    <script src="/assets/admin.js?v=0.4.6" defer></script>
+  </body>
+</html>

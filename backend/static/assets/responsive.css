@@ -1,0 +1,46 @@
+/* Layout responds to available CSS pixels, independent of screen density. */
+html:root .ui-v4.mode-classic .page { display: flex; flex-direction: column; min-height: 100svh; }
+html:root .ui-v4.mode-classic .workspace { flex: none; margin: auto; padding: 40px 0; width: min(1040px,100%); }
+html:root .ui-v4.mode-classic .dropzone { min-height: clamp(350px,46svh,720px); }
+html:root .ui-v4.mode-classic .dropzone h2 { font-size: 24px; }
+html:root .ui-v4.mode-classic .dropzone p { font-size: 14px; }
+html:root .ui-v4.mode-classic .intro-panel > p:not(.eyebrow) { font-size: 16px; }
+html:root .ui-v4.mode-classic .metrics span { font-size: 13px; }
+html:root .ui-v4.mode-classic footer { flex: none; margin: 0; padding: 12px 0 28px; font-size: 13px; }
+html:root .ui-v4.upload-has-files .workspace { margin: 32px auto auto; padding: 0 0 32px; }
+html:root .ui-v4.upload-has-files .dropzone { min-height: 180px; }
+html:root .ui-v4 .top-actions :is(.ghost-button,.primary-button) { font-size: 14px; }
+html:root .ui-v4 .admin-main { min-width: 0; }
+html:root .ui-v4 .admin-main :is(.settings-form,.config-section) { min-width: 0; }
+.save-feedback { position: fixed; left: 50%; bottom: 28px; translate: -50% 0; z-index: 10000; width: max-content; max-width: calc(100% - 32px); padding: 14px 20px; border: 1px solid var(--line); border-radius: 8px; color: var(--ink); background: var(--panel); box-shadow: 0 8px 32px #0002; font-size: 14px; overflow-wrap: anywhere; }
+.save-feedback[data-error="true"] { border-color: #c76868; }
+html:root .ui-v4 form[aria-busy="true"] button[type="submit"] { cursor: progress; }
+@media (min-width: 1600px) {
+  html:root .ui-v4.mode-classic .page { width: min(1680px,calc(100% - 128px)); max-width: none; }
+  html:root .ui-v4.mode-classic .workspace { width: min(1360px,100%); }
+  html:root .ui-v4.mode-classic:not(.upload-has-files) .upload-emblem { width: 112px; height: 112px; }
+  html:root .ui-v4.mode-classic:not(.upload-has-files) .upload-emblem img { width: 104px; height: 104px; }
+  html:root .ui-v4.mode-classic:not(.upload-has-files) .upload-emblem::before { border-radius: 28px; }
+  html:root .ui-v4 .dashboard-shell { width: min(1720px,calc(100% - 128px)); }
+  html:root .ui-v4 .admin-main { width: 100%; max-width: 1820px; margin-inline: auto; }
+}
+@media (min-width: 2200px) {
+  html:root .ui-v4.mode-classic .page { width: min(2040px,calc(100% - 192px)); }
+  html:root .ui-v4.mode-classic .workspace { width: min(1640px,100%); }
+  html:root .ui-v4.mode-classic:not(.upload-has-files) .upload-emblem { width: 128px; height: 128px; }
+  html:root .ui-v4.mode-classic:not(.upload-has-files) .upload-emblem img { width: 116px; height: 116px; }
+  html:root .ui-v4 .dashboard-shell { width: min(1920px,calc(100% - 192px)); }
+}
+@media (max-width: 760px) {
+  html:root .ui-v4.mode-classic .workspace { width: 100%; padding: 28px 0; }
+  html:root .ui-v4.mode-classic .dropzone { min-height: 310px; }
+  html:root .ui-v4.upload-has-files .dropzone { min-height: 180px; }
+  html:root .ui-v4.mode-classic .dropzone h2 { font-size: 20px; }
+  html:root .ui-v4.mode-classic .dropzone p { font-size: 13px; }
+  html:root .ui-v4.upload-has-files .workspace { margin-top: 20px; }
+}
+@media (max-height: 650px) and (min-width: 761px) {
+  html:root .ui-v4.mode-classic .workspace { padding: 24px 0; }
+  html:root .ui-v4.mode-classic .dropzone { min-height: 280px; }
+  html:root .ui-v4.upload-has-files .dropzone { min-height: 180px; }
+}

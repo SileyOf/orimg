@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer">
+  <title>安装 · Origin</title><link rel="icon" href="/assets/favicon.svg">
+  <script src="/assets/appearance.js?v=0.4.7"></script>
+  <link rel="stylesheet" href="/assets/styles.css?v=0.4.7"><link rel="stylesheet" href="/assets/design.css?v=0.4.7"><link rel="stylesheet" href="/assets/appearance.css?v=0.4.7"><link rel="stylesheet" href="/assets/install.css?v=0.4.7">
+</head>
+<body class="ui-v4 install-page">
+  <div class="install-shell">
+    <header class="install-header"><a class="brand" href="/install"><span class="install-logo" aria-hidden="true"></span><span><strong>Origin</strong><small>首次部署</small></span></a><span class="install-version">v0.5.0</span></header>
+    <div class="install-layout">
+      <nav aria-label="安装进度"><ol class="install-steps"><li aria-current="step"><span>1</span>验证安装权限</li><li><span>2</span>连接数据库</li><li><span>3</span>账号与确认</li></ol></nav>
+      <main>
+        <section id="accessStep"><h1>开始安装</h1><p class="install-lead">为这个站点建立安全的初始配置。</p>
+          <form id="accessForm"><label>安装码<input name="token" type="password" required autocomplete="off" minlength="48" maxlength="96" spellcheck="false" placeholder="服务器启动日志中的一次性安装码"></label><div class="install-actions"><button class="primary-button" type="submit">验证并继续</button></div></form>
+        </section>
+        <section id="databaseStep" hidden><h1>连接数据库</h1><p class="install-lead">MySQL · 空数据库或已有 Origin 数据库</p>
+          <form id="databaseForm">
+            <div class="install-fields"><label class="install-host">数据库地址<input name="host" required maxlength="253" placeholder="mysql" autocomplete="off" spellcheck="false"></label><label>端口<input name="port" required inputmode="numeric" pattern="[0-9]+" value="3306"></label></div>
+            <label>数据库名称<input name="name" required pattern="[A-Za-z0-9_]+" maxlength="64" autocomplete="off" placeholder="origin"></label>
+            <div class="install-fields"><label>数据库用户<input name="user" required autocomplete="off" maxlength="80"></label><label>数据库密码<input name="password" type="password" autocomplete="off" maxlength="512"></label></div>
+            <label>站点地址<input name="base_url" type="url" required placeholder="https://img.example.com" autocomplete="url"></label>
+            <label>数据库传输<select name="tls"><option value="verify">TLS · 验证服务器证书</option><option value="disabled">不使用 TLS · 仅限隔离网络</option></select></label>
+            <details id="caDetails"><summary>自定义 CA 证书</summary><label>CA 证书（PEM）<textarea name="ca" rows="5" spellcheck="false" maxlength="12000"></textarea></label></details>
+            <p class="install-note">数据库需已创建。检查连接只读取结构，不修改数据。</p>
+            <div class="install-actions"><button class="primary-button" type="submit">检查连接</button></div>
+          </form>
+        </section>
+        <section id="accountStep" hidden><h1 id="accountHeading">设置管理员</h1><p id="databaseSummary" class="install-lead"></p>
+          <form id="accountForm">
+            <label id="usernameField">管理员用户名<input name="admin_username" required minlength="3" maxlength="80" pattern="[A-Za-z0-9_.-]+" autocomplete="username" value="admin"></label>
+            <label><span id="emailLabel">管理员邮箱</span><input name="admin_email" type="email" required maxlength="190" autocomplete="email"></label>
+            <label><span id="passwordLabel">管理员密码</span><input name="admin_password" type="password" required minlength="12" maxlength="128" autocomplete="new-password"></label>
+            <label id="confirmPasswordField">确认密码<input name="confirm_password" type="password" required maxlength="128" autocomplete="new-password"></label>
+            <label id="originalSecretField" hidden>原 JWT_SECRET<input name="original_secret" type="password" minlength="1" maxlength="1024" autocomplete="off" spellcheck="false"></label>
+            <div id="existingNotice" class="install-notice" hidden><strong>保留已有账号和站点设置</strong><p>仅升级缺失的数据库结构，不重设管理员。图片原文件不在数据库内，原上传目录、自定义资源及存储挂载仍需保留。</p></div>
+            <label id="workersField" class="install-check" hidden><input name="enable_workers" type="checkbox"><span>连接后立即启用后台任务</span></label>
+            <p id="workersNote" class="install-note" hidden>默认暂停备份、邮件及清理任务。核对原存储挂载后，可通过 DISABLE_BACKGROUND_WORK=false 重启启用。</p>
+            <label class="install-check"><input name="confirmed" type="checkbox" required><span id="confirmLabel">已准备好持久化数据目录和数据库备份</span></label>
+            <div class="install-actions"><button id="backToDatabase" class="ghost-button" type="button">返回连接设置</button><button class="primary-button" type="submit" id="completeButton">完成安装</button></div>
+          </form>
+        </section>
+        <section id="successStep" hidden><span class="install-success-mark" aria-hidden="true">✓</span><h1>站点已就绪</h1><p class="install-lead">安装入口已关闭，配置已保存。</p><p id="successNote" class="install-note"></p><div class="install-actions"><a class="primary-button" href="/dashboard" id="loginLink">进入用户中心</a></div></section>
+        <p id="installMessage" class="install-message" role="status" aria-live="polite"></p>
+        <noscript>安装需要启用 JavaScript。</noscript>
+      </main>
+    </div>
+    <footer>Origin · 安全初始化</footer>
+  </div><script src="/assets/install.js?v=0.4.7" defer></script>
+</body></html>
