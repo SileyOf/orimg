@@ -111,7 +111,16 @@ func migrate(db *sql.DB, cfg *config.Config) error {
 			INDEX idx_job_items_work (status, next_retry_at, job_id)
 		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
 	}
+	unified, err := unifiedSchemaApplied(db)
+	if err != nil {
+		return err
+	}
 	for _, stmt := range statements {
+		// Legacy replica and job tables are only needed until schema 10
+		// converts them; never recreate them afterwards.
+		if unified && (strings.Contains(stmt, "image_replicas") || strings.Contains(stmt, "storage_job")) {
+			continue
+		}
 		if _, err := db.Exec(stmt); err != nil {
 			return err
 		}
@@ -166,16 +175,17 @@ func migrate(db *sql.DB, cfg *config.Config) error {
 	if err := ensureIndex(db, "idx_images_deleted_cursor", `CREATE INDEX idx_images_deleted_cursor ON images (deleted_at, created_at, id)`); err != nil {
 		return err
 	}
-	if err := runVersionedMigrations(db); err != nil {
-		return err
+	return runVersionedMigrations(db, cfg)
+}
+
+func unifiedSchemaApplied(db *sql.DB) (bool, error) {
+	var tables int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='schema_migrations'`).Scan(&tables); err != nil || tables == 0 {
+		return false, err
 	}
-	if _, err := db.Exec(`INSERT IGNORE INTO image_replicas (image_id, storage_mode, storage_key, status, checksum_sha256, size)
-		SELECT id, storage_mode, storage_key, 'ready', checksum_sha256, size
-		FROM images WHERE storage_mode IN ('local', 's3')
-		AND NOT EXISTS (SELECT 1 FROM storage_target_replicas tr WHERE tr.image_id=images.id AND tr.is_primary=1)`); err != nil {
-		return err
-	}
-	return nil
+	var applied int
+	err := db.QueryRow(`SELECT COUNT(*) FROM schema_migrations WHERE version >= 10`).Scan(&applied)
+	return applied > 0, err
 }
 
 func ensureColumn(db *sql.DB, table, column, definition string) error {
@@ -340,7 +350,6 @@ func seedSettings(db *sql.DB, cfg *config.Config) error {
 		"admin_path":             "/admin",
 		"user_path":              "/dashboard",
 		"public_upload_enabled":  "false",
-		"storage_mode":           cfg.StorageMode,
 		"max_upload_mb":          strconv.FormatInt(cfg.MaxUploadMB, 10),
 		"cache_ttl_days":         "30",
 		"disk_stop_percent":      "85",
@@ -351,16 +360,9 @@ func seedSettings(db *sql.DB, cfg *config.Config) error {
 		"db_backup_s3_prefix":    "backups/database",
 		"mysqldump_path":         "mysqldump",
 		"allowed_types":          "jpg,jpeg,png,gif,webp,avif,bmp,tif,tiff,ico,svg,heic,heif,jxl,psd",
-		"local_upload_dir":       cfg.UploadDir,
 		"s3_cache_dir":           cfg.CacheDir,
+		"db_backup_storage_id":   "0",
 		"thumb_dir":              "data/thumbs",
-		"s3_endpoint":            cfg.S3.Endpoint,
-		"s3_region":              cfg.S3.Region,
-		"s3_bucket":              cfg.S3.Bucket,
-		"s3_access_key":          cfg.S3.AccessKey,
-		"s3_secret_key":          cfg.S3.SecretKey,
-		"s3_force_path_style":    strconv.FormatBool(cfg.S3.ForcePathStyle),
-		"s3_key_prefix":          "images",
 		"login_captcha_enabled":  "true",
 		"upload_rate_per_min":    "60",
 		"image_rate_per_min":     "600",

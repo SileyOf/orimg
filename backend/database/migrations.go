@@ -3,6 +3,8 @@ package database
 import (
 	"database/sql"
 	"fmt"
+
+	"zhuapic/config"
 )
 
 type migration struct {
@@ -11,7 +13,7 @@ type migration struct {
 	up      func(*sql.Tx) error
 }
 
-func runVersionedMigrations(db *sql.DB) error {
+func runVersionedMigrations(db *sql.DB, cfg *config.Config) error {
 	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
 		version INT NOT NULL PRIMARY KEY,
 		name VARCHAR(190) NOT NULL,
@@ -30,6 +32,7 @@ func runVersionedMigrations(db *sql.DB) error {
 		{version: 7, name: "group storage permissions and user profiles", up: migrateUserProfiles},
 		{version: 8, name: "transactional mail and revocable sessions", up: migrateMail},
 		{version: 9, name: "email registration and editable mail templates", up: migrateRegistration},
+		{version: 10, name: "unified storages, image copies, operations and group storage access", up: migrateUnifiedStorage(cfg)},
 	}
 	for _, item := range migrations {
 		var count int

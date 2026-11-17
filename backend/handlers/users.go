@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"zhuapic/models"
-	"zhuapic/storage"
 	"zhuapic/utils"
 )
 
@@ -66,11 +65,8 @@ func (a *App) Me(w http.ResponseWriter, r *http.Request) {
 	}
 	policy := a.uploadPolicyFor(user, true)
 	public := publicPolicy(policy)
-	if id, err := storage.ParseTargetSelection(policy.StorageMode); err == nil {
-		var name string
-		if err := a.DB.QueryRowContext(r.Context(), "SELECT name FROM storage_targets WHERE id=?", id).Scan(&name); err == nil {
-			public["storage_name"] = name
-		}
+	if _, def, err := a.uploadChoices(r, policy, user.Role == "admin"); err == nil && def != nil {
+		public["storage_name"] = def.Name
 	}
 	utils.WriteJSON(w, http.StatusOK, map[string]any{
 		"user": userResponse(user), "upload_policy": public, "upload_usage": a.uploadUsageFor(user),
@@ -239,7 +235,7 @@ func (a *App) ListUsers(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) CreateUser(w http.ResponseWriter, r *http.Request) {
-	unlock, lockErr := a.Coordinator.LockTargetConfig(r.Context())
+	unlock, lockErr := a.Storage.LockConfig(r.Context())
 	if lockErr != nil {
 		utils.WriteError(w, 409, lockErr.Error())
 		return
@@ -293,7 +289,7 @@ func (a *App) CreateUser(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) UpdateUser(w http.ResponseWriter, r *http.Request) {
-	unlock, lockErr := a.Coordinator.LockTargetConfig(r.Context())
+	unlock, lockErr := a.Storage.LockConfig(r.Context())
 	if lockErr != nil {
 		utils.WriteError(w, 409, lockErr.Error())
 		return

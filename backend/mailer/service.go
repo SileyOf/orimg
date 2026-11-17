@@ -210,7 +210,7 @@ func (s *Service) ProcessOne(ctx context.Context) error {
 	if challenge != "" {
 		var count int
 		if kind == "register" {
-			err = s.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM registration_requests r JOIN registration_settings s ON s.id=1 AND s.enabled=1 AND s.group_id=r.group_id JOIN user_groups g ON g.id=r.group_id JOIN upload_policies p ON p.id=g.policy_id AND p.active=1 WHERE r.token_hash=? AND r.consumed_at IS NULL AND r.expires_at>NOW()`, challenge).Scan(&count)
+			err = s.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM registration_requests r JOIN registration_settings s ON s.id=1 AND s.enabled=1 AND s.group_id=r.group_id JOIN user_groups g ON g.id=r.group_id AND g.active=1 WHERE r.token_hash=? AND r.consumed_at IS NULL AND r.expires_at>NOW()`, challenge).Scan(&count)
 		} else {
 			err = s.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM account_challenges c JOIN users u ON u.id=c.user_id WHERE c.token_hash=? AND c.consumed_at IS NULL AND c.expires_at>NOW() AND u.active=1 AND u.auth_version=c.auth_version AND u.email=c.old_email`, challenge).Scan(&count)
 		}

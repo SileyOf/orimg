@@ -19,7 +19,7 @@ import (
 	"zhuapic/utils"
 )
 
-const SchemaVersion = 9
+const SchemaVersion = 10
 
 type Inspection struct {
 	Empty        bool  `json:"empty"`
@@ -34,7 +34,10 @@ func Open(ctx context.Context, cfg *config.Config) (*sql.DB, error) {
 	c.User, c.Passwd, c.DBName = cfg.DBUser, cfg.DBPassword, cfg.DBName
 	c.Net, c.Addr = "tcp", net.JoinHostPort(cfg.DBHost, cfg.DBPort)
 	c.ParseTime, c.Loc = true, time.Local
-	c.Params = map[string]string{"charset": "utf8mb4"}
+	// DATETIME values carry no zone. Run the session in the application's
+	// zone so NOW()/CURRENT_TIMESTAMP and values written from Go agree even
+	// when the MySQL server uses another zone (for example a UTC container).
+	c.Params = map[string]string{"charset": "utf8mb4", "time_zone": "'" + time.Now().Format("-07:00") + "'"}
 	c.Timeout, c.ReadTimeout, c.WriteTimeout = 8*time.Second, 2*time.Minute, 30*time.Second
 	if cfg.DBTLS == "verify" {
 		c.TLS = &tls.Config{MinVersion: tls.VersionTLS12, ServerName: cfg.DBHost}
@@ -218,7 +221,7 @@ func VerifySecrets(ctx context.Context, db *sql.DB, secret string) error {
 		}
 	}
 	for _, item := range []struct{ table, column string }{
-		{"site_settings", "value"}, {"storage_targets", "config_json"}, {"mail_settings", "config_json"}, {"mail_outbox", "payload"},
+		{"site_settings", "value"}, {"storage_targets", "config_json"}, {"storages", "config_json"}, {"mail_settings", "config_json"}, {"mail_outbox", "payload"},
 	} {
 		var exists int
 		if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=?`, item.table).Scan(&exists); err != nil {

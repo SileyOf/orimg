@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"path"
@@ -24,12 +25,24 @@ type S3Client struct {
 	httpClient *http.Client
 }
 
+// remoteTransport is shared by S3 and WebDAV clients. Short connect and
+// header timeouts let an unreachable storage fail fast instead of tying up a
+// worker for minutes; large bodies are bounded by the caller's context.
+var remoteTransport = &http.Transport{
+	Proxy:                 http.ProxyFromEnvironment,
+	DialContext:           (&net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
+	TLSHandshakeTimeout:   10 * time.Second,
+	ResponseHeaderTimeout: 30 * time.Second,
+	ExpectContinueTimeout: time.Second,
+	MaxIdleConnsPerHost:   8,
+	IdleConnTimeout:       90 * time.Second,
+	ForceAttemptHTTP2:     true,
+}
+
 func NewS3Client(cfg config.S3Config) *S3Client {
 	return &S3Client{
-		cfg: cfg,
-		httpClient: &http.Client{
-			Timeout: 5 * time.Minute,
-		},
+		cfg:        cfg,
+		httpClient: &http.Client{Transport: remoteTransport, Timeout: 30 * time.Minute},
 	}
 }
 
@@ -99,6 +112,9 @@ func (s *S3Client) OpenObject(ctx context.Context, key string) (io.ReadCloser, e
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		defer resp.Body.Close()
 		message, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
+		if resp.StatusCode == http.StatusNotFound {
+			return nil, fmt.Errorf("%w: s3 %s", ErrObjectNotFound, key)
+		}
 		return nil, fmt.Errorf("s3 get failed: %s %s", resp.Status, strings.TrimSpace(string(message)))
 	}
 	return resp.Body, nil

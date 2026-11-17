@@ -2,19 +2,19 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
-    <script src="/assets/appearance.js?v=0.4.6"></script>
+    <script src="/assets/appearance.js?v=0.7.0"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>管理后台</title>
-    <link rel="icon" href="/assets/favicon.svg?v=0.4.6" />
-    <link rel="stylesheet" href="/assets/styles.css?v=0.4.6" />
-    <link rel="stylesheet" href="/assets/album.css?v=0.4.6" />
-    <link rel="stylesheet" href="/assets/design.css?v=0.4.6" />
-    <link rel="stylesheet" href="/assets/appearance.css?v=0.4.6" />
-    <link rel="stylesheet" href="/assets/background.css?v=0.4.6" />
-    <link rel="stylesheet" href="/assets/account.css?v=0.4.6" />
-    <link rel="stylesheet" href="/assets/responsive.css?v=0.4.6" />
-    <link rel="stylesheet" href="/assets/storage-targets.css?v=0.4.6" />
-    <link rel="stylesheet" href="/assets/mail.css?v=0.4.6" />
+    <link rel="icon" href="/assets/favicon.svg?v=0.7.0" />
+    <link rel="stylesheet" href="/assets/styles.css?v=0.7.0" />
+    <link rel="stylesheet" href="/assets/album.css?v=0.7.0" />
+    <link rel="stylesheet" href="/assets/design.css?v=0.7.0" />
+    <link rel="stylesheet" href="/assets/appearance.css?v=0.7.0" />
+    <link rel="stylesheet" href="/assets/background.css?v=0.7.0" />
+    <link rel="stylesheet" href="/assets/account.css?v=0.7.0" />
+    <link rel="stylesheet" href="/assets/responsive.css?v=0.7.0" />
+    <link rel="stylesheet" href="/assets/storage-targets.css?v=0.7.0" />
+    <link rel="stylesheet" href="/assets/mail.css?v=0.7.0" />
   </head>
   <body class="admin-page ui-v4" data-brand-pending>
     <div class="auth-status" id="authStatus" role="status"><span class="auth-spinner" aria-hidden="true"></span><p id="authStatusText">正在确认登录状态</p><button class="ghost-button compact" id="retrySession" type="button" hidden>重试</button></div>
@@ -121,7 +121,7 @@
             <header class="target-toolbar"><div><h2>存储空间</h2><p id="targetSummary">正在读取</p></div><button class="primary-button" type="button" id="addStorageTarget">新增存储</button></header>
             <div id="targetNotice" role="status" hidden></div>
             <section class="cache-overview" aria-labelledby="cacheTitle">
-              <header class="target-toolbar"><div><h3 id="cacheTitle">S3 本地读取缓存</h3><p>临时缓存 · 不计入永久副本</p></div><button class="icon-button" id="refreshCache" type="button" title="刷新缓存统计" aria-label="刷新缓存统计"></button></header>
+              <header class="target-toolbar"><div><h3 id="cacheTitle">远程存储读取缓存</h3><p>S3 / WebDAV 图片的本地临时缓存 · 不计入副本</p></div><button class="icon-button" id="refreshCache" type="button" title="刷新缓存统计" aria-label="刷新缓存统计"></button></header>
               <div class="cache-metrics"><div><small>缓存占用</small><strong id="cacheBytes">--</strong><span id="cacheFiles">--</span></div><div><small>已过期待清理</small><strong id="cacheExpired">--</strong><span id="cacheExpiredFiles">--</span></div><div><small>保留时间</small><strong id="cacheTTL">--</strong><span id="cacheCleanup">--</span></div></div>
               <div class="cache-location"><span>本地目录</span><code id="cacheDirectory">--</code></div>
               <p id="cacheMessage" role="status">正在读取缓存统计</p>
@@ -129,7 +129,7 @@
             </section>
             <div class="catalog-tools" id="storageViewTools">
               <input type="search" data-catalog-search placeholder="搜索存储名称、地址" aria-label="搜索存储" />
-              <select data-catalog-filter aria-label="筛选存储"><option value="">全部状态</option><option value="enabled">已启用</option><option value="paused">已暂停</option><option value="failed">有异常</option></select>
+              <select data-catalog-filter aria-label="筛选存储"><option value="">全部状态</option><option value="active">已启用</option><option value="paused">已暂停</option><option value="offline">离线</option><option value="failed">有异常副本</option><option value="draining">移除中</option></select>
               <span data-catalog-count></span><div data-view-switch role="group" aria-label="存储查看方式"></div>
             </div>
             <div class="target-inventory" id="storageTargets"></div>
@@ -147,28 +147,12 @@
               </div>
             </div>
 
-            <section class="storage-command-center" aria-label="存储状态">
+            <section class="storage-command-center" aria-label="副本状态">
               <div class="storage-health-grid">
-                <article class="storage-health-card local-health">
-                  <span>Local</span>
-                  <strong id="localReplicaCount">--</strong>
-                  <small id="localReplicaSize">正在读取</small>
-                </article>
-                <article class="storage-health-card s3-health">
-                  <span>S3</span>
-                  <strong id="s3ReplicaCount">--</strong>
-                  <small id="s3ReplicaSize">正在读取</small>
-                </article>
-                <article class="storage-health-card sync-health">
-                  <span>同步队列</span>
-                  <strong id="replicaPendingCount">--</strong>
-                  <small id="replicaFailureCount">等待状态</small>
-                </article>
-                <article class="storage-health-card disk-health">
-                  <span>本地磁盘</span>
-                  <strong id="diskUsageValue">--</strong>
-                  <small id="diskUsageLimit">安全线 85%</small>
-                </article>
+                <article class="storage-health-card sync-health"><span>等待同步</span><strong id="replicaPendingCount">--</strong><small>份副本</small></article>
+                <article class="storage-health-card"><span>异常副本</span><strong id="replicaFailureCount">--</strong><small>失败或缺失，会自动重试</small></article>
+                <article class="storage-health-card"><span>无可用副本</span><strong id="withoutCopyCount">--</strong><small>图片暂时无法访问</small></article>
+                <article class="storage-health-card"><span>进行中的任务</span><strong id="operationCount">--</strong><small>迁出、校验或备份</small></article>
               </div>
             </section>
 
@@ -176,7 +160,7 @@
               <h3>缓存与缩略图</h3>
               <div class="form-grid">
                 <label>
-                  S3 缓存目录
+                  远程读取缓存目录
                   <input name="s3_cache_dir" />
                 </label>
                 <label>
@@ -208,7 +192,7 @@
                   <input name="recycle_bin_days" type="number" min="1" max="30" />
                 </label>
                 <label class="switch-line worker-switch">
-                  <span>副本工作器</span>
+                  <span>后台副本同步</span>
                   <input name="replica_worker_enabled" type="checkbox" />
                 </label>
               </div>
@@ -227,7 +211,7 @@
                 <button class="ghost-button compact" id="runDatabaseBackup" type="button">立即备份</button>
               </div>
               <div class="form-grid three">
-                <label>备份存储<select name="db_backup_target_id" id="databaseBackupTarget"><option value="0">原 S3 存储（兼容旧配置）</option></select></label>
+                <label>备份存储<select name="db_backup_storage_id" id="databaseBackupTarget"><option value="0">未选择</option></select></label>
                 <label class="switch-line worker-switch">
                   <span>每日自动备份</span>
                   <input name="db_backup_enabled" type="checkbox" />
@@ -253,18 +237,17 @@
           </section>
 
           <section class="admin-panel admin-tab" data-panel="tasks" hidden>
-            <section class="target-task-section"><h2>多地副本</h2><div id="targetTasks"></div></section>
             <div class="section-title">
               <div>
                 <h2>后台任务</h2>
-                <p class="inline-help">副本任务从存储页创建；邮件发送记录位于邮件页。</p>
+                <p class="inline-help">移除存储、校验副本和数据库备份的进度。副本同步与清理按存储自动运行，离线存储会自动暂停并稍后重试。</p>
               </div>
               <button class="ghost-button compact" id="reloadStorage" type="button">刷新</button>
             </div>
-            <div class="task-history-heading"><div><h3>任务记录</h3><p>副本任务可恢复执行；中断的数据库备份需要重新运行。</p></div></div>
             <div class="storage-jobs" id="storageJobs">
-              <div class="storage-job-empty">暂无副本同步、校验或备份任务</div>
+              <div class="storage-job-empty">暂无任务</div>
             </div>
+            <section class="target-task-section"><h2>副本异常</h2><div id="targetTasks"></div></section>
           </section>
 
           <section class="admin-panel admin-tab" data-panel="mail" hidden>
@@ -535,7 +518,7 @@
             </div>
             <form class="image-filter-bar admin-image-filter" id="adminImageFilterForm">
               <label class="search-field"><span>搜索</span><input id="adminImageSearch" placeholder="文件名、图片 ID、用户或邮箱" /></label>
-              <label><span>存储</span><select id="adminImageStorage"><option value="">全部</option><option value="local">Local</option><option value="s3">S3</option><option value="webdav">WebDAV</option><option value="mirror">Mirror</option></select></label>
+              <label><span>存储</span><select id="adminImageStorage"><option value="">全部</option><option value="none">无可用副本</option></select></label>
               <label><span>从</span><input id="adminImageFrom" type="date" /></label>
               <label><span>到</span><input id="adminImageTo" type="date" /></label>
               <button class="primary-button compact" type="submit">筛选</button>
@@ -597,15 +580,15 @@
       </form>
     </div>
 
-    <script src="/assets/album-icons.js?v=0.4.6" defer></script>
-    <script src="/assets/background.js?v=0.4.6" defer></script>
-    <script src="/assets/branding.js?v=0.4.6" defer></script>
-    <script src="/assets/design.js?v=0.4.6" defer></script>
-    <script src="/assets/album.js?v=0.4.6" defer></script>
-    <script src="/assets/account.js?v=0.4.6" defer></script>
-    <script src="/assets/catalog-views.js?v=0.4.6" defer></script>
-    <script src="/assets/storage-targets.js?v=0.4.6" defer></script>
-    <script src="/assets/mail-admin.js?v=0.4.6" defer></script>
-    <script src="/assets/admin.js?v=0.4.6" defer></script>
+    <script src="/assets/album-icons.js?v=0.7.0" defer></script>
+    <script src="/assets/background.js?v=0.7.0" defer></script>
+    <script src="/assets/branding.js?v=0.7.0" defer></script>
+    <script src="/assets/design.js?v=0.7.0" defer></script>
+    <script src="/assets/album.js?v=0.7.0" defer></script>
+    <script src="/assets/account.js?v=0.7.0" defer></script>
+    <script src="/assets/catalog-views.js?v=0.7.0" defer></script>
+    <script src="/assets/storage-targets.js?v=0.7.0" defer></script>
+    <script src="/assets/mail-admin.js?v=0.7.0" defer></script>
+    <script src="/assets/admin.js?v=0.7.0" defer></script>
   </body>
 </html>

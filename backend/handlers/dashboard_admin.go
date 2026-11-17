@@ -34,8 +34,8 @@ func (a *App) AdminDashboard(w http.ResponseWriter, r *http.Request) {
 		{`SELECT COUNT(*), COALESCE(SUM(size), 0) FROM images WHERE deleted_at IS NULL`, []any{&result.Images, &result.ImageBytes}},
 		{`SELECT COUNT(*), COALESCE(SUM(size), 0) FROM images WHERE deleted_at IS NULL AND created_at >= CURDATE()`, []any{&result.UploadsToday, &result.UploadBytesToday}},
 		{`SELECT COUNT(*), COALESCE(SUM(active = 1), 0) FROM users`, []any{&result.Users, &result.ActiveUsers}},
-		{`SELECT COALESCE(SUM(status IN ('pending', 'syncing', 'verifying')), 0), COALESCE(SUM(status IN ('failed','verify_failed')), 0) FROM (SELECT status FROM image_replicas UNION ALL SELECT status FROM storage_target_replicas) replicas`, []any{&result.PendingReplicas, &result.FailedReplicas}},
-		{`SELECT COALESCE(SUM(status IN ('queued', 'paused')), 0), COALESCE(SUM(status = 'running'), 0) FROM storage_jobs`, []any{&result.QueuedJobs, &result.RunningJobs}},
+		{`SELECT COALESCE(SUM(state IN ('pending', 'verifying')), 0), COALESCE(SUM(state IN ('failed', 'missing')), 0) FROM image_copies`, []any{&result.PendingReplicas, &result.FailedReplicas}},
+		{`SELECT COALESCE(SUM(status = 'queued'), 0), COALESCE(SUM(status = 'running'), 0) FROM operations`, []any{&result.QueuedJobs, &result.RunningJobs}},
 	}
 	dbStats := a.DB.Stats()
 	result.DBOpen = dbStats.OpenConnections

@@ -15,7 +15,7 @@ func (a *App) UpdateGuestGroup(w http.ResponseWriter, r *http.Request) {
 		utils.WriteError(w, 400, "invalid group")
 		return
 	}
-	unlock, err := a.Coordinator.LockTargetConfig(r.Context())
+	unlock, err := a.Storage.LockConfig(r.Context())
 	if err != nil {
 		utils.WriteError(w, 409, err.Error())
 		return

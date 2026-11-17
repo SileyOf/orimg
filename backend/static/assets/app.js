@@ -142,7 +142,6 @@ function applyPolicy(policy) {
 	if (policy.active === false) showMessage("未分配有效用户组或上传已停用，请联系管理员。", false);
 	setText(els.maxUploadLabel, `${policy.max_file_mb || 20}MB`);
 	setText(els.batchLimitLabel, `${policy.max_batch_count || 20}张`);
-	if (policy.storage_mode && policy.storage_mode !== "default") setText(els.storagePill, policy.storage_mode);
 }
 
 function imageFiles(fileList) {

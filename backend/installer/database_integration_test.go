@@ -78,7 +78,7 @@ func TestIsolatedDatabaseInstallation(t *testing.T) {
 	if activated == nil {
 		t.Fatal("not activated")
 	}
-	app := routes.Setup(db, activated, storage.NewManager(activated))
+	app := routes.Setup(db, activated, storage.NewService(db, activated, storage.NewManager(activated)))
 	for _, endpoint := range []struct {
 		path   string
 		status int

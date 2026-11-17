@@ -20,13 +20,7 @@ func testRegistrationFlow(t *testing.T, a *App, s *mailer.Service) {
 	db := a.DB
 	suffix := strconv.FormatInt(time.Now().UnixNano(), 10)
 	email := "register-" + suffix + "@example.test"
-	res, err := db.Exec(`INSERT INTO upload_policies(name,slug,allowed_types) VALUES(?,?,'jpg,png')`, "fixture-"+suffix, "fixture-"+suffix)
-	if err != nil {
-		t.Fatal(err)
-	}
-	policy, _ := res.LastInsertId()
-	defer db.Exec(`DELETE FROM upload_policies WHERE id=?`, policy)
-	res, err = db.Exec(`INSERT INTO user_groups(name,slug,policy_id,is_system) VALUES(?,?,?,0)`, "fixture-"+suffix, "fixture-"+suffix, policy)
+	res, err := db.Exec(`INSERT INTO user_groups(name,slug,is_system,allowed_types) VALUES(?,?,0,'jpg,png')`, "fixture-"+suffix, "fixture-"+suffix)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -88,11 +82,11 @@ func testRegistrationFlow(t *testing.T, a *App, s *mailer.Service) {
 		t.Fatal("closed registration accepted", rr.Code)
 	}
 	db.Exec(`UPDATE registration_settings SET enabled=1 WHERE id=1`)
-	db.Exec(`UPDATE upload_policies SET active=0 WHERE id=?`, policy)
+	db.Exec(`UPDATE user_groups SET active=0 WHERE id=?`, group)
 	if rr := call(a.ConfirmRegistration, body); rr.Code != 409 {
 		t.Fatal("inactive group accepted", rr.Code)
 	}
-	db.Exec(`UPDATE upload_policies SET active=1 WHERE id=?`, policy)
+	db.Exec(`UPDATE user_groups SET active=1 WHERE id=?`, group)
 	if rr := call(a.ConfirmRegistration, body); rr.Code != 201 {
 		t.Fatal(rr.Code, rr.Body.String())
 	}

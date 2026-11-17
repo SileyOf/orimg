@@ -22,7 +22,7 @@ SHA256SUMS          包内文件校验和
 ```sh
 sudo useradd --system --home /opt/origin --shell /usr/sbin/nologin origin
 sudo mkdir -p /opt/origin
-sudo tar -xzf origin-v0.6.0-linux-amd64.tar.gz -C /opt/origin --strip-components=1
+sudo tar -xzf origin-v0.7.0-linux-amd64.tar.gz -C /opt/origin --strip-components=1
 cd /opt/origin && sha256sum -c SHA256SUMS
 sudo install -d -o origin -g origin -m 0750 /opt/origin/data
 ```

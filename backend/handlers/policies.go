@@ -5,28 +5,28 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
 
 	"zhuapic/models"
-	"zhuapic/storage"
 	"zhuapic/utils"
 )
 
 type updatePolicyRequest struct {
-	MaxFileMB             int64  `json:"max_file_mb"`
-	MaxBatchCount         int    `json:"max_batch_count"`
-	MaxDailyUploads       int64  `json:"max_daily_uploads"`
-	MaxDailyBytes         int64  `json:"max_daily_bytes"`
-	TotalQuotaBytes       int64  `json:"total_quota_bytes"`
-	StorageMode           string `json:"storage_mode"`
-	AllowStorageSelection bool   `json:"allow_storage_selection"`
-	RetentionDays         int    `json:"retention_days"`
-	AllowedTypes          string `json:"allowed_types"`
-	AllowSVG              bool   `json:"allow_svg"`
-	AllowAPI              bool   `json:"allow_api"`
-	Active                bool   `json:"active"`
+	MaxFileMB        int64  `json:"max_file_mb"`
+	MaxBatchCount    int    `json:"max_batch_count"`
+	MaxDailyUploads  int64  `json:"max_daily_uploads"`
+	MaxDailyBytes    int64  `json:"max_daily_bytes"`
+	TotalQuotaBytes  int64  `json:"total_quota_bytes"`
+	DefaultStorageID uint   `json:"default_storage_id"`
+	StorageIDs       []uint `json:"storage_ids"`
+	RetentionDays    int    `json:"retention_days"`
+	AllowedTypes     string `json:"allowed_types"`
+	AllowSVG         bool   `json:"allow_svg"`
+	AllowAPI         bool   `json:"allow_api"`
+	Active           bool   `json:"active"`
 }
 
 type createGroupRequest struct {
@@ -38,10 +38,40 @@ type updateGroupRequest struct {
 	Name string `json:"name"`
 }
 
+const groupColumns = `g.id, g.name, g.slug, g.is_system, g.max_file_mb, g.max_batch_count, g.max_daily_uploads, g.max_daily_bytes,
+	g.total_quota_bytes, COALESCE(g.default_storage_id, 0), g.retention_days, COALESCE(g.allowed_types, ''), g.allow_svg, g.allow_api,
+	g.active, g.created_at, g.updated_at`
+
+func scanGroup(row interface{ Scan(...any) error }, group *models.UserGroup) error {
+	p := &group.Policy
+	err := row.Scan(&group.ID, &group.Name, &group.Slug, &group.IsSystem, &p.MaxFileMB, &p.MaxBatchCount, &p.MaxDailyUploads, &p.MaxDailyBytes,
+		&p.TotalQuotaBytes, &p.DefaultStorageID, &p.RetentionDays, &p.AllowedTypes, &p.AllowSVG, &p.AllowAPI, &p.Active, &p.CreatedAt, &p.UpdatedAt)
+	p.ID, p.Name, p.Slug, group.PolicyID = group.ID, group.Name, group.Slug, group.ID
+	p.StorageIDs = []uint{}
+	return err
+}
+
+func (a *App) groupStorages(ctx context.Context) (map[uint][]uint, error) {
+	rows, err := a.DB.QueryContext(ctx, `SELECT gs.group_id, gs.storage_id FROM group_storages gs JOIN storages s ON s.id = gs.storage_id ORDER BY gs.storage_id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[uint][]uint{}
+	for rows.Next() {
+		var group, storageID uint
+		if err := rows.Scan(&group, &storageID); err != nil {
+			return nil, err
+		}
+		out[group] = append(out[group], storageID)
+	}
+	return out, rows.Err()
+}
+
 func (a *App) AdminGroups(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		a.listGroups(w)
+		a.listGroups(w, r)
 	case http.MethodPost:
 		a.createGroup(w, r)
 	default:
@@ -60,49 +90,47 @@ func (a *App) AdminGroup(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (a *App) listGroups(w http.ResponseWriter) {
-	rows, err := a.DB.Query(`SELECT user_group.id, user_group.name, user_group.slug, user_group.policy_id, user_group.is_system, COUNT(users.id),
-		policies.id, policies.name, policies.slug, policies.max_file_mb, policies.max_batch_count,
-		policies.max_daily_uploads, policies.max_daily_bytes, policies.total_quota_bytes, policies.storage_mode,
-		policies.retention_days, policies.allowed_types, policies.allow_svg, policies.allow_api, policies.active,
-		policies.created_at, policies.updated_at, policies.allow_storage_selection
-		FROM user_groups user_group
-		JOIN upload_policies policies ON policies.id = user_group.policy_id
-		LEFT JOIN users ON users.group_id = user_group.id
-		GROUP BY user_group.id, user_group.name, user_group.slug, user_group.policy_id, user_group.is_system,
-		policies.id, policies.name, policies.slug, policies.max_file_mb, policies.max_batch_count,
-		policies.max_daily_uploads, policies.max_daily_bytes, policies.total_quota_bytes, policies.storage_mode,
-		policies.retention_days, policies.allowed_types, policies.allow_svg, policies.allow_api, policies.active,
-		policies.created_at, policies.updated_at, policies.allow_storage_selection
-		ORDER BY user_group.id ASC`)
+func (a *App) listGroups(w http.ResponseWriter, r *http.Request) {
+	rows, err := a.DB.QueryContext(r.Context(), `SELECT `+groupColumns+`, (SELECT COUNT(*) FROM users u WHERE u.group_id = g.id) FROM user_groups g ORDER BY g.id`)
 	if err != nil {
 		utils.WriteError(w, http.StatusInternalServerError, "failed to load user groups")
 		return
 	}
-	defer rows.Close()
 	groups := []models.UserGroup{}
 	for rows.Next() {
 		var group models.UserGroup
-		if err := rows.Scan(&group.ID, &group.Name, &group.Slug, &group.PolicyID, &group.IsSystem, &group.MemberCount,
-			&group.Policy.ID, &group.Policy.Name, &group.Policy.Slug, &group.Policy.MaxFileMB, &group.Policy.MaxBatchCount,
-			&group.Policy.MaxDailyUploads, &group.Policy.MaxDailyBytes, &group.Policy.TotalQuotaBytes, &group.Policy.StorageMode,
-			&group.Policy.RetentionDays, &group.Policy.AllowedTypes, &group.Policy.AllowSVG, &group.Policy.AllowAPI,
-			&group.Policy.Active, &group.Policy.CreatedAt, &group.Policy.UpdatedAt, &group.Policy.AllowStorageSelection); err != nil {
+		var members int64
+		if err := scanGroup(scanTail{rows, &members}, &group); err != nil {
+			rows.Close()
 			utils.WriteError(w, http.StatusInternalServerError, "failed to read user groups")
 			return
 		}
+		group.MemberCount = members
 		groups = append(groups, group)
+	}
+	rows.Close()
+	allowed, err := a.groupStorages(r.Context())
+	if err != nil {
+		utils.WriteError(w, http.StatusInternalServerError, "failed to read group storages")
+		return
+	}
+	for i := range groups {
+		if ids, ok := allowed[groups[i].ID]; ok {
+			groups[i].Policy.StorageIDs = ids
+		}
 	}
 	utils.WriteJSON(w, http.StatusOK, map[string]any{"groups": groups, "guest_group_id": utils.SettingInt64(a.DB, "guest_group_id", 0, 0, 1<<32-1)})
 }
 
+// scanTail appends extra destinations after the group columns.
+type scanTail struct {
+	row   interface{ Scan(...any) error }
+	extra *int64
+}
+
+func (s scanTail) Scan(dest ...any) error { return s.row.Scan(append(dest, s.extra)...) }
+
 func (a *App) createGroup(w http.ResponseWriter, r *http.Request) {
-	unlock, lockErr := a.Coordinator.LockTargetConfig(r.Context())
-	if lockErr != nil {
-		utils.WriteError(w, 409, lockErr.Error())
-		return
-	}
-	defer unlock()
 	var req createGroupRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		utils.WriteError(w, http.StatusBadRequest, "invalid user group payload")
@@ -120,7 +148,6 @@ func (a *App) createGroup(w http.ResponseWriter, r *http.Request) {
 		utils.WriteError(w, http.StatusConflict, "group name already exists")
 		return
 	}
-	baseGroupID := req.CopyFromGroupID
 	random, err := utils.RandomHex(6)
 	if err != nil {
 		utils.WriteError(w, http.StatusInternalServerError, "failed to create user group")
@@ -134,37 +161,30 @@ func (a *App) createGroup(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 	var res sql.Result
-	if baseGroupID == 0 {
-		res, err = tx.Exec(`INSERT INTO upload_policies (name,slug,allowed_types,total_quota_bytes) VALUES (?,?,?,?)`, name, slug, "jpg,jpeg,png,gif,webp,avif", int64(5*1024*1024*1024))
+	if req.CopyFromGroupID == 0 {
+		res, err = tx.Exec(`INSERT INTO user_groups (name, slug, is_system, allowed_types, total_quota_bytes) VALUES (?, ?, 0, ?, ?)`,
+			name, slug, "jpg,jpeg,png,gif,webp,avif", int64(5*1024*1024*1024))
 	} else {
-		res, err = tx.Exec(`INSERT INTO upload_policies
-		(name, slug, max_file_mb, max_batch_count, max_daily_uploads, max_daily_bytes, total_quota_bytes,
-		storage_mode, retention_days, allowed_types, allow_svg, allow_api, active, allow_storage_selection)
-		SELECT ?, ?, policy.max_file_mb, policy.max_batch_count, policy.max_daily_uploads, policy.max_daily_bytes,
-		policy.total_quota_bytes, policy.storage_mode, policy.retention_days, policy.allowed_types,
-		policy.allow_svg, policy.allow_api, policy.active, policy.allow_storage_selection
-		FROM user_groups user_group JOIN upload_policies policy ON policy.id = user_group.policy_id
-		WHERE user_group.id = ?`, name, slug, baseGroupID)
+		res, err = tx.Exec(`INSERT INTO user_groups (name, slug, is_system, max_file_mb, max_batch_count, max_daily_uploads, max_daily_bytes,
+			total_quota_bytes, default_storage_id, retention_days, allowed_types, allow_svg, allow_api, active)
+			SELECT ?, ?, 0, max_file_mb, max_batch_count, max_daily_uploads, max_daily_bytes, total_quota_bytes, default_storage_id,
+			retention_days, allowed_types, allow_svg, allow_api, active FROM user_groups WHERE id = ?`, name, slug, req.CopyFromGroupID)
 	}
 	if err != nil {
-		utils.WriteError(w, http.StatusInternalServerError, "failed to copy upload policy")
+		utils.WriteError(w, http.StatusInternalServerError, "failed to create user group")
 		return
 	}
 	if affected, _ := res.RowsAffected(); affected == 0 {
 		utils.WriteError(w, http.StatusBadRequest, "source user group not found")
 		return
 	}
-	policyID, err := res.LastInsertId()
-	if err != nil {
-		utils.WriteError(w, http.StatusInternalServerError, "failed to create user group")
-		return
+	groupID, _ := res.LastInsertId()
+	if req.CopyFromGroupID != 0 {
+		if _, err = tx.Exec(`INSERT INTO group_storages (group_id, storage_id) SELECT ?, storage_id FROM group_storages WHERE group_id = ?`, groupID, req.CopyFromGroupID); err != nil {
+			utils.WriteError(w, http.StatusInternalServerError, "failed to copy group storages")
+			return
+		}
 	}
-	groupResult, err := tx.Exec(`INSERT INTO user_groups (name, slug, policy_id, is_system) VALUES (?, ?, ?, 0)`, name, slug, policyID)
-	if err != nil {
-		utils.WriteError(w, http.StatusInternalServerError, "failed to create user group")
-		return
-	}
-	groupID, _ := groupResult.LastInsertId()
 	if err := tx.Commit(); err != nil {
 		utils.WriteError(w, http.StatusInternalServerError, "failed to create user group")
 		return
@@ -197,32 +217,17 @@ func (a *App) updateGroup(w http.ResponseWriter, r *http.Request) {
 		utils.WriteError(w, http.StatusConflict, "group name already exists")
 		return
 	}
-	tx, err := a.DB.BeginTx(r.Context(), nil)
+	res, err := a.DB.Exec(`UPDATE user_groups SET name = ? WHERE id = ?`, name, id)
 	if err != nil {
 		utils.WriteError(w, http.StatusInternalServerError, "failed to update user group")
 		return
 	}
-	defer tx.Rollback()
-	var policyID uint
-	if err := tx.QueryRow(`SELECT policy_id FROM user_groups WHERE id = ? FOR UPDATE`, id).Scan(&policyID); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+	if n, _ := res.RowsAffected(); n == 0 {
+		var exists int
+		if a.DB.QueryRow(`SELECT COUNT(*) FROM user_groups WHERE id = ?`, id).Scan(&exists); exists == 0 {
 			utils.WriteError(w, http.StatusNotFound, "user group not found")
-		} else {
-			utils.WriteError(w, http.StatusInternalServerError, "failed to update user group")
+			return
 		}
-		return
-	}
-	if _, err := tx.Exec(`UPDATE user_groups SET name = ? WHERE id = ?`, name, id); err != nil {
-		utils.WriteError(w, http.StatusInternalServerError, "failed to update user group")
-		return
-	}
-	if _, err := tx.Exec(`UPDATE upload_policies SET name = ? WHERE id = ?`, name, policyID); err != nil {
-		utils.WriteError(w, http.StatusInternalServerError, "failed to update upload policy name")
-		return
-	}
-	if err := tx.Commit(); err != nil {
-		utils.WriteError(w, http.StatusInternalServerError, "failed to update user group")
-		return
 	}
 	actor, _ := a.currentUser(r)
 	a.writeAudit(r, actor, "user_group.updated", "user_group", strconv.FormatUint(uint64(id), 10), map[string]any{"name": name})
@@ -235,22 +240,14 @@ func (a *App) deleteGroup(w http.ResponseWriter, r *http.Request) {
 		utils.WriteError(w, http.StatusBadRequest, "invalid user group id")
 		return
 	}
-	unlock, err := a.Coordinator.LockTargetConfig(r.Context())
-	if err != nil {
-		utils.WriteError(w, 409, err.Error())
-		return
-	}
-	defer unlock()
 	tx, err := a.DB.BeginTx(r.Context(), nil)
 	if err != nil {
 		utils.WriteError(w, http.StatusInternalServerError, "failed to delete user group")
 		return
 	}
 	defer tx.Rollback()
-	var policyID uint
 	var name string
-	var system bool
-	if err := tx.QueryRow(`SELECT policy_id, name, is_system FROM user_groups WHERE id = ? FOR UPDATE`, id).Scan(&policyID, &name, &system); err != nil {
+	if err := tx.QueryRow(`SELECT name FROM user_groups WHERE id = ? FOR UPDATE`, id).Scan(&name); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			utils.WriteError(w, http.StatusNotFound, "user group not found")
 		} else {
@@ -263,21 +260,21 @@ func (a *App) deleteGroup(w http.ResponseWriter, r *http.Request) {
 		utils.WriteError(w, http.StatusInternalServerError, "failed to delete user group")
 		return
 	}
-	if _, err := tx.Exec(`UPDATE users SET group_id=NULL WHERE group_id=?`, id); err != nil {
-		utils.WriteError(w, 500, "failed to detach group members")
-		return
-	}
 	if _, err := tx.Exec("UPDATE site_settings SET value='0' WHERE `key`='guest_group_id' AND value=?", strconv.FormatUint(uint64(id), 10)); err != nil {
-		utils.WriteError(w, 500, "failed to detach guest group")
-		return
-	}
-	if _, err := tx.Exec(`DELETE FROM user_groups WHERE id = ?`, id); err != nil {
+		log.Printf("delete user group %d: %v", id, err)
 		utils.WriteError(w, http.StatusInternalServerError, "failed to delete user group")
 		return
 	}
-	if _, err := tx.Exec(`DELETE FROM upload_policies WHERE id = ?`, policyID); err != nil {
-		utils.WriteError(w, http.StatusInternalServerError, "failed to delete upload policy")
-		return
+	for _, q := range []string{
+		`UPDATE users SET group_id=NULL WHERE group_id=?`,
+		`DELETE FROM group_storages WHERE group_id = ?`,
+		`DELETE FROM user_groups WHERE id = ?`,
+	} {
+		if _, err := tx.Exec(q, id); err != nil {
+			log.Printf("delete user group %d: %v", id, err)
+			utils.WriteError(w, http.StatusInternalServerError, "failed to delete user group")
+			return
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		utils.WriteError(w, http.StatusInternalServerError, "failed to delete user group")
@@ -289,18 +286,8 @@ func (a *App) deleteGroup(w http.ResponseWriter, r *http.Request) {
 	utils.WriteJSON(w, http.StatusOK, map[string]any{"deleted": true})
 }
 
-func (a *App) groupNameExists(name string, exceptID uint) (bool, error) {
-	var count int
-	err := a.DB.QueryRow(`SELECT COUNT(*) FROM user_groups WHERE LOWER(name) = LOWER(?) AND id <> ?`, name, exceptID).Scan(&count)
-	return count > 0, err
-}
-
-func cleanGroupName(value string) (string, bool) {
-	value = strings.TrimSpace(value)
-	length := len([]rune(value))
-	return value, length >= 2 && length <= 80
-}
-
+// UpdateUploadPolicy saves a group's upload limits and storage access. The
+// path ID is the group ID (policies are part of groups since schema 10).
 func (a *App) UpdateUploadPolicy(w http.ResponseWriter, r *http.Request) {
 	id, err := utils.UserIDFromString(r.PathValue("id"))
 	if err != nil {
@@ -318,45 +305,75 @@ func (a *App) UpdateUploadPolicy(w http.ResponseWriter, r *http.Request) {
 	req.MaxDailyBytes = clampInt64(req.MaxDailyBytes, 0, 10*1024*1024*1024*1024)
 	req.TotalQuotaBytes = clampInt64(req.TotalQuotaBytes, 0, 100*1024*1024*1024*1024)
 	req.RetentionDays = int(clampInt64(int64(req.RetentionDays), 0, 3650))
-	unlock, lockErr := a.Coordinator.LockTargetConfig(r.Context())
-	if lockErr != nil {
-		utils.WriteError(w, 409, lockErr.Error())
+	req.AllowedTypes = sanitizeSetting("allowed_types", req.AllowedTypes, a.Cfg)
+	unlock, err := a.Storage.LockConfig(r.Context())
+	if err != nil {
+		utils.WriteError(w, 409, err.Error())
 		return
 	}
 	defer unlock()
-	if strings.HasPrefix(req.StorageMode, "target:") {
-		targetID, parseErr := storage.ParseTargetSelection(req.StorageMode)
-		if parseErr != nil {
-			utils.WriteError(w, 400, parseErr.Error())
-			return
-		}
-		target, loadErr := a.Coordinator.Target(r.Context(), targetID)
-		if loadErr != nil || !target.Enabled || !target.Configured {
-			utils.WriteError(w, 400, "所选存储未启用或配置不完整")
-			return
-		}
-	} else if req.StorageMode != "local" && req.StorageMode != "s3" && req.StorageMode != "mirror" {
-		req.StorageMode = "default"
+	candidates, err := a.Storage.UploadCandidates(r.Context())
+	if err != nil {
+		utils.WriteError(w, 500, "无法读取存储")
+		return
 	}
-	req.AllowedTypes = sanitizeSetting("allowed_types", req.AllowedTypes, a.Cfg)
-	res, err := a.DB.Exec(`UPDATE upload_policies SET max_file_mb = ?, max_batch_count = ?, max_daily_uploads = ?,
-		max_daily_bytes = ?, total_quota_bytes = ?, storage_mode = ?, retention_days = ?, allowed_types = ?,
-		allow_svg = ?, allow_api = ?, active = ?, allow_storage_selection = ? WHERE id = ?`, req.MaxFileMB, req.MaxBatchCount,
-		req.MaxDailyUploads, req.MaxDailyBytes, req.TotalQuotaBytes, req.StorageMode, req.RetentionDays,
-		req.AllowedTypes, req.AllowSVG, req.AllowAPI, req.Active, req.AllowStorageSelection, id)
+	usable := map[uint]bool{}
+	for _, st := range candidates {
+		usable[st.ID] = true
+	}
+	if req.DefaultStorageID != 0 && !usable[req.DefaultStorageID] {
+		utils.WriteError(w, 400, "默认上传位置必须是已启用且允许上传的存储")
+		return
+	}
+	allowed := []uint{}
+	seen := map[uint]bool{}
+	for _, sid := range req.StorageIDs {
+		if !seen[sid] {
+			if !usable[sid] {
+				utils.WriteError(w, 400, "所选存储未启用或不允许上传")
+				return
+			}
+			seen[sid] = true
+			allowed = append(allowed, sid)
+		}
+	}
+	tx, err := a.DB.BeginTx(r.Context(), nil)
+	if err != nil {
+		utils.WriteError(w, 500, "failed to save upload policy")
+		return
+	}
+	defer tx.Rollback()
+	res, err := tx.Exec(`UPDATE user_groups SET max_file_mb = ?, max_batch_count = ?, max_daily_uploads = ?, max_daily_bytes = ?,
+		total_quota_bytes = ?, default_storage_id = NULLIF(?, 0), retention_days = ?, allowed_types = ?, allow_svg = ?, allow_api = ?, active = ?
+		WHERE id = ?`, req.MaxFileMB, req.MaxBatchCount, req.MaxDailyUploads, req.MaxDailyBytes, req.TotalQuotaBytes, req.DefaultStorageID,
+		req.RetentionDays, req.AllowedTypes, req.AllowSVG, req.AllowAPI, req.Active, id)
 	if err != nil {
 		utils.WriteError(w, http.StatusInternalServerError, "failed to save upload policy")
 		return
 	}
 	if changed, _ := res.RowsAffected(); changed == 0 {
 		var exists int
-		if err := a.DB.QueryRow(`SELECT COUNT(*) FROM upload_policies WHERE id=?`, id).Scan(&exists); err != nil || exists == 0 {
-			utils.WriteError(w, http.StatusNotFound, "upload policy not found")
+		if err := tx.QueryRow(`SELECT COUNT(*) FROM user_groups WHERE id=?`, id).Scan(&exists); err != nil || exists == 0 {
+			utils.WriteError(w, http.StatusNotFound, "user group not found")
 			return
 		}
 	}
+	if _, err := tx.Exec(`DELETE FROM group_storages WHERE group_id = ?`, id); err != nil {
+		utils.WriteError(w, 500, "failed to save group storages")
+		return
+	}
+	for _, sid := range allowed {
+		if _, err := tx.Exec(`INSERT INTO group_storages (group_id, storage_id) VALUES (?, ?)`, id, sid); err != nil {
+			utils.WriteError(w, 500, "failed to save group storages")
+			return
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		utils.WriteError(w, 500, "failed to save upload policy")
+		return
+	}
 	actor, _ := a.currentUser(r)
-	a.writeAudit(r, actor, "upload_policy.updated", "upload_policy", strconv.FormatUint(uint64(id), 10), nil)
+	a.writeAudit(r, actor, "upload_policy.updated", "user_group", strconv.FormatUint(uint64(id), 10), map[string]any{"storages": allowed})
 	utils.WriteJSON(w, http.StatusOK, map[string]any{"updated": true})
 }
 
@@ -370,23 +387,48 @@ func (a *App) uploadPolicyFor(user *models.User, loggedIn bool) models.UploadPol
 	if groupID == 0 {
 		return models.UploadPolicy{}
 	}
-	query := `SELECT policies.id, policies.name, policies.slug, policies.max_file_mb, policies.max_batch_count,
-		policies.max_daily_uploads, policies.max_daily_bytes, policies.total_quota_bytes, policies.storage_mode,
-		policies.retention_days, policies.allowed_types, policies.allow_svg, policies.allow_api, policies.active,
-		policies.created_at, policies.updated_at, policies.allow_storage_selection FROM upload_policies policies
-		JOIN user_groups user_group ON user_group.policy_id = policies.id WHERE user_group.id = ?`
-	var policy models.UploadPolicy
-	err := a.DB.QueryRow(query, groupID).Scan(&policy.ID, &policy.Name, &policy.Slug, &policy.MaxFileMB,
-		&policy.MaxBatchCount, &policy.MaxDailyUploads, &policy.MaxDailyBytes, &policy.TotalQuotaBytes,
-		&policy.StorageMode, &policy.RetentionDays, &policy.AllowedTypes, &policy.AllowSVG, &policy.AllowAPI,
-		&policy.Active, &policy.CreatedAt, &policy.UpdatedAt, &policy.AllowStorageSelection)
-	if err == nil {
-		if loggedIn && user != nil && user.QuotaBytes != nil {
-			policy.TotalQuotaBytes = *user.QuotaBytes
-		}
-		return policy
+	var group models.UserGroup
+	if err := scanGroup(a.DB.QueryRow(`SELECT `+groupColumns+` FROM user_groups g WHERE g.id = ?`, groupID), &group); err != nil {
+		return models.UploadPolicy{}
 	}
-	return models.UploadPolicy{}
+	policy := group.Policy
+	rows, err := a.DB.Query(`SELECT gs.storage_id FROM group_storages gs JOIN storages s ON s.id = gs.storage_id WHERE gs.group_id = ? ORDER BY gs.storage_id`, groupID)
+	if err == nil {
+		for rows.Next() {
+			var sid uint
+			if rows.Scan(&sid) == nil {
+				policy.StorageIDs = append(policy.StorageIDs, sid)
+			}
+		}
+		rows.Close()
+	}
+	if loggedIn && user != nil && user.QuotaBytes != nil {
+		policy.TotalQuotaBytes = *user.QuotaBytes
+	}
+	return policy
+}
+
+func publicPolicy(policy models.UploadPolicy) map[string]any {
+	return map[string]any{
+		"name": policy.Name, "slug": policy.Slug, "max_file_mb": policy.MaxFileMB,
+		"max_batch_count": policy.MaxBatchCount, "max_daily_uploads": policy.MaxDailyUploads,
+		"max_daily_bytes": policy.MaxDailyBytes, "total_quota_bytes": policy.TotalQuotaBytes,
+		"default_storage_id": policy.DefaultStorageID, "storage_ids": policy.StorageIDs,
+		"retention_days": policy.RetentionDays, "active": policy.Active,
+		"allowed_types": policy.AllowedTypes, "allow_svg": policy.AllowSVG, "allow_api": policy.AllowAPI,
+	}
+}
+
+func (a *App) groupNameExists(name string, exceptID uint) (bool, error) {
+	var count int
+	err := a.DB.QueryRow(`SELECT COUNT(*) FROM user_groups WHERE LOWER(name) = LOWER(?) AND id <> ?`, name, exceptID).Scan(&count)
+	return count > 0, err
+}
+
+func cleanGroupName(value string) (string, bool) {
+	value = strings.TrimSpace(value)
+	length := len([]rune(value))
+	return value, length >= 2 && length <= 80
 }
 
 func (a *App) consumePolicyUsage(policy models.UploadPolicy, user *models.User, ip string, size int64) error {
@@ -452,17 +494,6 @@ func clampInt64(value, minValue, maxValue int64) int64 {
 		return maxValue
 	}
 	return value
-}
-
-func publicPolicy(policy models.UploadPolicy) map[string]any {
-	return map[string]any{
-		"name": policy.Name, "slug": policy.Slug, "max_file_mb": policy.MaxFileMB,
-		"max_batch_count": policy.MaxBatchCount, "max_daily_uploads": policy.MaxDailyUploads,
-		"max_daily_bytes": policy.MaxDailyBytes, "total_quota_bytes": policy.TotalQuotaBytes,
-		"storage_mode": policy.StorageMode, "retention_days": policy.RetentionDays,
-		"active": policy.Active, "allow_storage_selection": policy.AllowStorageSelection,
-		"allowed_types": policy.AllowedTypes, "allow_svg": policy.AllowSVG, "allow_api": policy.AllowAPI,
-	}
 }
 
 func (a *App) uploadUsageFor(user *models.User) map[string]any {

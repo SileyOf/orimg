@@ -31,7 +31,7 @@ const { execFileSync } = require('node:child_process');
       const info = JSON.parse(execFileSync('docker', ['image', 'inspect', '--platform', `linux/${arch}`, image], { encoding:'utf8' }))[0];
       if (info.Config.User !== '10001:10001' || info.Config.Labels['org.opencontainers.image.version'] !== version) throw Error('Unexpected image configuration');
       await fs.writeFile(path.join(dest, 'BUILDINFO.json'), JSON.stringify({ version, image, platform:`linux/${arch}`, imageID:info.Id,
-        schemaVersion:9, builtAt:new Date().toISOString(), includesDatabaseServer:false, includesUserData:false }, null, 2)+'\n');
+        schemaVersion:10, builtAt:new Date().toISOString(), includesDatabaseServer:false, includesUserData:false }, null, 2)+'\n');
       const files = (await fs.readdir(dest)).sort();
       const hashes = [];
       for (const file of files) hashes.push(`${await digest(path.join(dest, file))}  ${file}`);

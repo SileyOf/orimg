@@ -32,7 +32,8 @@ var webdavCollections sync.Map
 func NewWebDAVClient(cfg WebDAVConfig) *WebDAVClient {
 	base, _ := url.Parse(strings.TrimRight(strings.TrimSpace(cfg.URL), "/"))
 	return &WebDAVClient{cfg: cfg, base: base, httpClient: &http.Client{
-		Timeout: 5 * time.Minute,
+		Transport: remoteTransport,
+		Timeout:   30 * time.Minute,
 		// Redirects would replay credentials to another location.
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}}
@@ -170,6 +171,9 @@ func (w *WebDAVClient) Open(ctx context.Context, key string) (io.ReadCloser, err
 	}
 	if resp.StatusCode != http.StatusOK {
 		defer resp.Body.Close()
+		if resp.StatusCode == http.StatusNotFound {
+			return nil, fmt.Errorf("%w: webdav %s", ErrObjectNotFound, key)
+		}
 		return nil, webdavStatusError("get", resp)
 	}
 	return resp.Body, nil

@@ -168,3 +168,32 @@ html:root .ui-v4 .group-dialog .policy-actions { flex:none; display:flex; flex-d
 html:root .ui-v4 .group-dialog .policy-actions button { white-space:nowrap; width:auto; }
 @media(max-width:600px) { .group-dialog .policy-fields { grid-template-columns:repeat(2,minmax(0,1fr)); } .group-dialog > header,.group-dialog .policy-content,html:root .ui-v4 .group-dialog .policy-actions { padding:18px; } }
 #targetEditor [hidden] { display: none !important; }
+.target-health { font-weight: 600; }
+.target-health.is-ok { color: #3f8a4a; }
+.target-health.is-warning { color: #b7791f; }
+.target-draining { margin: 0; font-size: 13px; color: #b7791f; }
+html:root .ui-v4 #storageRemoval { width: min(560px,calc(100% - 32px)); max-height: calc(100dvh - 40px); padding: 0; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); box-shadow: 0 24px 90px #0003; }
+#storageRemoval::backdrop { background: #151b2250; backdrop-filter: blur(3px); }
+#storageRemoval form { display: grid; gap: 16px; padding: 24px; }
+#storageRemoval [hidden] { display: none !important; }
+#storageRemoval header, #storageRemoval footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+#storageRemoval footer { justify-content: flex-end; }
+#storageRemoval h2 { margin: 0; font-size: 19px; }
+#storageRemoval .removal-facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+#storageRemoval .removal-facts div { display: grid; gap: 2px; padding: 10px 12px; border-radius: 8px; background: color-mix(in srgb, var(--ink) 6%, transparent); }
+#storageRemoval .removal-facts strong { font-size: 20px; }
+#storageRemoval .removal-facts small, #storageRemoval .removal-choice small { color: var(--muted, inherit); }
+#storageRemoval .removal-choice { display: grid; gap: 14px; margin: 0; padding: 0; border: 0; min-width: 0; }
+#storageRemoval .removal-choice label { display: flex; gap: 10px; align-items: flex-start; margin: 0; font-weight: 400; }
+#storageRemoval .removal-choice label > span { display: grid; gap: 3px; min-width: 0; }
+#storageRemoval .removal-choice small { line-height: 1.6; }
+#storageRemoval .removal-choice input[type="radio"], #storageRemoval .removal-choice input[type="checkbox"] { flex: none; width: 16px; height: 16px; margin: 3px 0 0; padding: 0; }
+#storageRemoval .removal-choice .removal-indent { margin-left: 26px; }
+#storageRemoval .removal-choice label.removal-indent:has(select) { display: grid; gap: 6px; }
+#storageRemoval select { width: 100%; }
+#storageRemoval p { margin: 0; }
+@media (max-width: 600px) { .removal-facts { grid-template-columns: 1fr; } }
+.policy-storages { display: grid; gap: 8px; margin: 0; padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; }
+.policy-storages legend { padding: 0 6px; font-size: 13px; font-weight: 600; }
+.target-state.is-error { color: var(--red, #c0392b); overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.target-actions { min-width: 0; }

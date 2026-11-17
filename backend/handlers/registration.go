@@ -42,7 +42,7 @@ func (a *App) RegistrationSettings(w http.ResponseWriter, r *http.Request) {
 		defer tx.Rollback()
 		if settings.GroupID > 0 || settings.Enabled {
 			var active bool
-			if tx.QueryRowContext(r.Context(), `SELECT p.active FROM user_groups g JOIN upload_policies p ON p.id=g.policy_id WHERE g.id=? FOR UPDATE`, settings.GroupID).Scan(&active) != nil || settings.Enabled && !active {
+			if tx.QueryRowContext(r.Context(), `SELECT g.active FROM user_groups g WHERE g.id=? FOR UPDATE`, settings.GroupID).Scan(&active) != nil || settings.Enabled && !active {
 				utils.WriteError(w, 400, "请选择启用的用户组")
 				return
 			}
@@ -92,7 +92,7 @@ func (a *App) RequestRegistration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var group uint
-	if a.DB.QueryRowContext(r.Context(), `SELECT s.group_id FROM registration_settings s JOIN user_groups g ON g.id=s.group_id JOIN upload_policies p ON p.id=g.policy_id WHERE s.id=1 AND s.enabled=1 AND p.active=1`).Scan(&group) != nil {
+	if a.DB.QueryRowContext(r.Context(), `SELECT s.group_id FROM registration_settings s JOIN user_groups g ON g.id=s.group_id WHERE s.id=1 AND s.enabled=1 AND g.active=1`).Scan(&group) != nil {
 		utils.WriteError(w, 403, "站点暂未开放注册")
 		return
 	}
@@ -180,7 +180,7 @@ func (a *App) ConfirmRegistration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var active bool
-	if tx.QueryRowContext(ctx, `SELECT p.active FROM user_groups g JOIN upload_policies p ON p.id=g.policy_id WHERE g.id=? FOR UPDATE`, group).Scan(&active) != nil || !active {
+	if tx.QueryRowContext(ctx, `SELECT g.active FROM user_groups g WHERE g.id=? FOR UPDATE`, group).Scan(&active) != nil || !active {
 		utils.WriteError(w, 409, "注册用户组已不可用，请联系管理员")
 		return
 	}

@@ -161,6 +161,14 @@ function mountAccount() {
   $("#dashboardGreeting").textContent = state.me.username ? `${state.me.username} 的空间` : "我的空间";
 }
 
+async function loadStorageFilter() {
+  try {
+    const data = await request("/api/storage/options");
+    const select = els.imageStorageFilter;
+    select.replaceChildren(new Option("全部", ""), ...(data.storages || []).sort((a, b) => a.id - b.id).map((s) => new Option(s.name, String(s.id))));
+  } catch { /* the filter keeps "全部" */ }
+}
+
 async function enterDashboard() {
   const data = await request("/api/me");
   if (!data.user) throw new Error("账号信息暂时不可用");
@@ -168,6 +176,7 @@ async function enterDashboard() {
   state.policy = data.upload_policy || null;
   state.usage = data.upload_usage || null;
   renderPolicySummary();
+  loadStorageFilter();
   els.profileForm.elements.username.value = state.me.username || "";
   els.profileForm.elements.email.value = state.me.email || "";
   mountAccount();
@@ -235,7 +244,7 @@ function renderPolicySummary() {
 	els.policyLimits.textContent = policy.active === false ? "不可上传" : `${policy.max_file_mb || 20}MB / ${policy.max_batch_count || 20}张`;
 	els.policyQuota.textContent = policy.active === false ? `${prettyBytes(used)} · 上传已停用` : (quota > 0 ? `${prettyBytes(used)} / ${prettyBytes(quota)}` : `${prettyBytes(used)} / 不限`) + (state.me?.quota_bytes != null ? " · 个人容量" : "");
 	els.policyQuotaBar.style.width = `${quota > 0 ? Math.min(100, (used / quota) * 100) : 0}%`;
-	els.overviewStorageMode.textContent = !policy.storage_mode || policy.storage_mode === "default" ? "跟随站点" : (policy.storage_name || { local: "Local", s3: "S3", mirror: "Local + S3" }[policy.storage_mode] || "指定存储");
+	els.overviewStorageMode.textContent = policy.storage_name || "跟随站点";
 }
 
 async function loadUserOverview() {

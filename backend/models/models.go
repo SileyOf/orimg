@@ -19,24 +19,26 @@ type User struct {
 	UpdatedAt     time.Time `json:"updated_at"`
 }
 
+// UploadPolicy is the upload part of a user group: limits, quota and which
+// storages its members may upload to.
 type UploadPolicy struct {
-	ID                    uint      `json:"id"`
-	Name                  string    `json:"name"`
-	Slug                  string    `json:"slug"`
-	MaxFileMB             int64     `json:"max_file_mb"`
-	MaxBatchCount         int       `json:"max_batch_count"`
-	MaxDailyUploads       int64     `json:"max_daily_uploads"`
-	MaxDailyBytes         int64     `json:"max_daily_bytes"`
-	TotalQuotaBytes       int64     `json:"total_quota_bytes"`
-	StorageMode           string    `json:"storage_mode"`
-	AllowStorageSelection bool      `json:"allow_storage_selection"`
-	RetentionDays         int       `json:"retention_days"`
-	AllowedTypes          string    `json:"allowed_types"`
-	AllowSVG              bool      `json:"allow_svg"`
-	AllowAPI              bool      `json:"allow_api"`
-	Active                bool      `json:"active"`
-	CreatedAt             time.Time `json:"created_at"`
-	UpdatedAt             time.Time `json:"updated_at"`
+	ID               uint      `json:"id"` // same as the group ID
+	Name             string    `json:"name"`
+	Slug             string    `json:"slug"`
+	MaxFileMB        int64     `json:"max_file_mb"`
+	MaxBatchCount    int       `json:"max_batch_count"`
+	MaxDailyUploads  int64     `json:"max_daily_uploads"`
+	MaxDailyBytes    int64     `json:"max_daily_bytes"`
+	TotalQuotaBytes  int64     `json:"total_quota_bytes"`
+	DefaultStorageID uint      `json:"default_storage_id"` // 0 follows the site default
+	StorageIDs       []uint    `json:"storage_ids"`        // storages members may choose
+	RetentionDays    int       `json:"retention_days"`
+	AllowedTypes     string    `json:"allowed_types"`
+	AllowSVG         bool      `json:"allow_svg"`
+	AllowAPI         bool      `json:"allow_api"`
+	Active           bool      `json:"active"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
 }
 
 type UserGroup struct {
@@ -58,8 +60,8 @@ type Image struct {
 	Size         int64      `json:"size"`
 	Width        int        `json:"width"`
 	Height       int        `json:"height"`
-	StorageMode  string     `json:"storage_mode"`
-	StorageKey   string     `json:"storage_key"`
+	StorageKey   string     `json:"-"` // object key written during upload
+	CopyIDs      string     `json:"-"` // storages holding a ready copy, comma separated
 	UserID       uint       `json:"user_id"`
 	Username     string     `json:"username"`
 	UploadIP     string     `json:"upload_ip"`
@@ -70,42 +72,6 @@ type Image struct {
 	ExpiresAt    *time.Time `json:"expires_at,omitempty"`
 	CreatedAt    time.Time  `json:"created_at"`
 	UpdatedAt    time.Time  `json:"updated_at"`
-}
-
-type ImageReplica struct {
-	ID             uint       `json:"id"`
-	ImageID        uint       `json:"image_id"`
-	StorageMode    string     `json:"storage_mode"`
-	StorageKey     string     `json:"storage_key"`
-	Status         string     `json:"status"`
-	ChecksumSHA256 string     `json:"checksum_sha256"`
-	Size           int64      `json:"size"`
-	Attempts       int        `json:"attempts"`
-	LastError      string     `json:"last_error"`
-	LastVerifiedAt *time.Time `json:"last_verified_at,omitempty"`
-	NextRetryAt    *time.Time `json:"next_retry_at,omitempty"`
-	CreatedAt      time.Time  `json:"created_at"`
-	UpdatedAt      time.Time  `json:"updated_at"`
-}
-
-type StorageJob struct {
-	ID             uint       `json:"id"`
-	Type           string     `json:"type"`
-	SourceMode     string     `json:"source_mode"`
-	TargetMode     string     `json:"target_mode"`
-	Status         string     `json:"status"`
-	TotalItems     int64      `json:"total_items"`
-	ProcessedItems int64      `json:"processed_items"`
-	SuccessItems   int64      `json:"success_items"`
-	FailedItems    int64      `json:"failed_items"`
-	TotalBytes     int64      `json:"total_bytes"`
-	ProcessedBytes int64      `json:"processed_bytes"`
-	LastError      string     `json:"last_error"`
-	CreatedBy      uint       `json:"created_by"`
-	StartedAt      *time.Time `json:"started_at,omitempty"`
-	CompletedAt    *time.Time `json:"completed_at,omitempty"`
-	CreatedAt      time.Time  `json:"created_at"`
-	UpdatedAt      time.Time  `json:"updated_at"`
 }
 
 type APIToken struct {

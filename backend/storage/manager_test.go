@@ -2,6 +2,8 @@ package storage
 
 import (
 	"context"
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,7 +20,7 @@ func TestReplicaKeyUsesOriginalDate(t *testing.T) {
 	opts := manager.DefaultOptions()
 	opts.S3Prefix = "private/images"
 	created := time.Date(2026, 7, 9, 10, 0, 0, 0, time.UTC)
-	if got := manager.ReplicaKey(opts, "local", created, "../photo.png"); got != filepath.Join("20260709", "photo.png") {
+	if got := manager.ReplicaKey(opts, "local", created, "../photo.png"); got != "20260709/photo.png" {
 		t.Fatalf("unexpected local key: %q", got)
 	}
 	if got := manager.ReplicaKey(opts, "s3", created, "../photo.png"); got != "private/images/20260709/photo.png" {
@@ -31,12 +33,23 @@ func TestLocalReplicaWriteIsReadableAndChecksummed(t *testing.T) {
 	manager := NewManager(cfg)
 	body := []byte("zhuapic-replica")
 	key := filepath.Join("20260709", "sample.bin")
-	if _, err := manager.WriteReplica(context.Background(), manager.DefaultOptions(), "local", key, "application/octet-stream", body); err != nil {
+	if err := manager.Put(context.Background(), manager.DefaultOptions(), "local", key, "application/octet-stream", int64(len(body)), strings.NewReader(string(body)), ChecksumSHA256(body)); err != nil {
 		t.Fatal(err)
 	}
-	read, err := manager.ReadBytes(context.Background(), manager.DefaultOptions(), "local", key)
+	reader, err := manager.Open(context.Background(), manager.DefaultOptions(), "local", key)
 	if err != nil {
 		t.Fatal(err)
+	}
+	read, err := io.ReadAll(reader)
+	reader.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.Open(context.Background(), manager.DefaultOptions(), "local", "missing.bin"); !errors.Is(err, ErrObjectNotFound) {
+		t.Fatalf("missing local object should be ErrObjectNotFound, got %v", err)
+	}
+	if err := manager.Put(context.Background(), manager.DefaultOptions(), "local", "short.bin", "", 99, strings.NewReader("short"), ""); err == nil {
+		t.Fatal("short body accepted")
 	}
 	if string(read) != string(body) {
 		t.Fatalf("unexpected replica content: %q", read)

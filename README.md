@@ -6,13 +6,13 @@
 [![Release](https://img.shields.io/github/v/release/SileyOf/orimg)](https://github.com/SileyOf/orimg/releases)
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
 
-当前版本 **v0.6.0**，变更见 [Changelog](CHANGELOG.md)。1.0 之前接口和部署方式仍可能调整，升级前请阅读对应版本的升级说明。
+当前版本 **v0.7.0**，变更见 [Changelog](CHANGELOG.md)。1.0 之前接口和部署方式仍可能调整，升级前请阅读对应版本的升级说明。
 
 ## 功能
 
 - **上传**：拖拽、粘贴、批量上传，真实进度；一键复制 URL / Markdown / HTML / BBCode；支持 API Token。
-- **存储**：多个命名存储位置——本地 / NAS 目录、S3 兼容（AWS、R2、MinIO、B2 等）、**WebDAV**（Nextcloud、群晖、Alist、rclone 等）。可设默认上传位置、按用户组开放选择，并自动备份到其他位置。
-- **可靠性**：SHA-256 校验、异步副本与失败退避重试、本地缺失时自动回源修复、可恢复的迁移与校验任务、7 天回收站、可选的 MySQL 定时备份。
+- **存储**：本地 / NAS 目录、S3 兼容（AWS、R2、MinIO、B2 等）、**WebDAV**（Nextcloud、群晖、Alist、rclone 等）可以同时使用。每张图片可以有多份副本：设置默认上传位置、自动备份位置，按用户组开放选择。
+- **可靠性**：SHA-256 校验、副本缺失或损坏时自动修复、离线存储自动熔断不影响其他存储、存储迁出后安全移除、7 天回收站、可选的 MySQL 定时备份。
 - **用户**：邮箱注册与验证、找回密码、自定义用户组、配额、上传策略和头像。
 - **外观**：自动 / 浅色 / 深色主题、强调色、自定义 Logo 与背景，邮件模板可编辑。
 - **安全**：首次安装需一次性安装码、无默认密码；SVG 过滤、登录限流与验证码、多域名白名单、只信任显式配置的反向代理。
@@ -41,8 +41,8 @@ docker compose logs origin        # 日志里有一次性安装码
 
 ```sh
 # 从 Releases 下载对应架构（x86_64 → amd64，aarch64 → arm64）
-tar -xzf origin-v0.6.0-linux-amd64.tar.gz
-cd origin-v0.6.0-linux-amd64
+tar -xzf origin-v0.7.0-linux-amd64.tar.gz
+cd origin-v0.7.0-linux-amd64
 ./zhuapic                         # 日志里有一次性安装码
 ```
 

@@ -111,8 +111,8 @@ else
   else
     ok "connected to $(get DB_NAME zhuapic) on $(get DB_HOST 127.0.0.1):$(get DB_PORT 3306)"
     schema="$(q "SELECT COALESCE(MAX(version),0) FROM schema_migrations")"
-    if [[ "$schema" == 9 ]]; then ok "schema version 9: same as v0.5.x, rollback to the binary stays possible"
-    else todo "schema version ${schema:-unknown}: v0.5.x will migrate it to 9; keep the database backup for rollback"; fi
+    if [[ "$schema" == 10 ]]; then ok "schema version 10: already current"
+    else todo "schema version ${schema:-unknown}: v0.7 migrates it to 10 (storages, copies, groups); back up the database first, it is needed for any rollback"; fi
     info "users: $(q 'SELECT COUNT(*) FROM users')  images: $(q 'SELECT COUNT(*) FROM images')"
     while IFS=$'\t' read -r key value; do
       [[ -z "$key" ]] && continue

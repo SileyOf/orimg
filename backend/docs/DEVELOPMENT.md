@@ -80,6 +80,7 @@ go vet ./...
 
 ## 数据库与容器测试
 
+- 升级回归：`GO_BIN=/path/to/go node docker/upgrade-smoke.cjs` 用上一版镜像（默认 `yuki955/orimg:0.6.0`）建立含本地、WebDAV、离线 S3 与用户组策略的站点，再原地升级到当前镜像，核对迁移结果、图片访问、移除离线存储和重启幂等。需要本地有 `rclone/rclone:1.68.2` 与 `mysql:8.4` 镜像。
 - 推荐 `GO_BIN=/path/to/go node docker/smoke.cjs`：创建内部网络、一次性 MySQL 与卷，关闭后台任务，验证两种架构的完整容器流程，结束后清理自己创建的资源。先按 [Docker 指南](DOCKER.md) 构建镜像。
 - `installer/database_integration_test.go` 只接受 `ORIMG_INSTALL_TEST_PORT` 指定的回环端口，要求全新空库 `orimg_install_test`，还会创建 `orimg_install_resume`。测试专用密码写在夹具中，不是部署默认密码。
 - 较早的 `ORIMG_TEST_DSN` 测试现已去掉旧服务器地址，必须同时设置 `ORIMG_ALLOW_DB_TESTS=1`，使用字面回环 IP、非特权 TCP 端口和库名 `zhuapictest`。库须预先具备匹配结构及各测试要求的空表；这些测试会写入并清理夹具，不能指向真实数据，不能混用并发共享库。

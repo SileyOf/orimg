@@ -40,19 +40,18 @@ func TestGroupProfilesOnApprovedTestDB(t *testing.T) {
 	defer db.Close()
 	db.SetMaxOpenConns(8)
 	cfg := &config.Config{JWTSecret: "profile-fixture-only", JWTExpiry: time.Hour, UploadDir: t.TempDir(), CacheDir: t.TempDir()}
-	manager := storage.NewManager(cfg)
-	a := &App{DB: db, Cfg: cfg, Store: manager, Coordinator: storage.NewCoordinator(db, cfg, manager)}
+	a := &App{DB: db, Cfg: cfg, Storage: storage.NewService(db, cfg, storage.NewManager(cfg))}
 	suffix := strconv.FormatInt(time.Now().UnixNano(), 10)
-	var uid, gid, pid uint
+	var uid, gid uint
 	var targetIDs []uint
 	defer func() {
 		db.Exec(`DELETE FROM user_avatars WHERE user_id=?`, uid)
 		db.Exec(`DELETE FROM upload_reservations WHERE user_id=?`, uid)
 		db.Exec(`DELETE FROM users WHERE id=?`, uid)
+		db.Exec(`DELETE FROM group_storages WHERE group_id=?`, gid)
 		db.Exec(`DELETE FROM user_groups WHERE id=?`, gid)
-		db.Exec(`DELETE FROM upload_policies WHERE id=?`, pid)
 		for _, id := range targetIDs {
-			db.Exec(`DELETE FROM storage_targets WHERE id=?`, id)
+			db.Exec(`DELETE FROM storages WHERE id=?`, id)
 		}
 		db.Exec(`DELETE FROM audit_logs WHERE actor_user_id=? OR (target_type='user_group' AND target_id=?)`, uid, fmt.Sprint(gid))
 	}()
@@ -88,9 +87,6 @@ func TestGroupProfilesOnApprovedTestDB(t *testing.T) {
 	}
 	json.Unmarshal(rr.Body.Bytes(), &created)
 	gid = created.ID
-	if err = db.QueryRow(`SELECT policy_id FROM user_groups WHERE id=?`, gid).Scan(&pid); err != nil {
-		t.Fatal(err)
-	}
 	if _, err = db.Exec(`UPDATE users SET group_id=?,quota_bytes=100 WHERE id=?`, gid, uid); err != nil {
 		t.Fatal(err)
 	}
@@ -103,20 +99,24 @@ func TestGroupProfilesOnApprovedTestDB(t *testing.T) {
 		t.Fatal(err)
 	}
 	policy := a.uploadPolicyFor(user, true)
-	if !policy.Active || policy.TotalQuotaBytes != 100 || policy.AllowStorageSelection {
+	if !policy.Active || policy.TotalQuotaBytes != 100 || len(policy.StorageIDs) != 0 || policy.DefaultStorageID != 0 {
 		t.Fatalf("incorrect effective policy: %+v", policy)
 	}
-	for _, access := range []string{"admin", "members"} {
-		target := storage.Target{Name: "profile-fixture-" + access, Provider: "local", Enabled: true, UploadAccess: access, Config: storage.TargetConfig{Directory: t.TempDir()}}
-		if err := a.Coordinator.SaveTarget(context.Background(), &target); err != nil {
+	for _, name := range []string{"fixed", "optional"} {
+		st := storage.Storage{Name: "profile-fixture-" + name + "-" + suffix, Provider: "local", Status: storage.StatusActive, AcceptUploads: true, Config: storage.StorageConfig{Directory: t.TempDir()}}
+		if err := a.Storage.Save(context.Background(), &st); err != nil {
 			t.Fatal(err)
 		}
-		targetIDs = append(targetIDs, target.ID)
+		targetIDs = append(targetIDs, st.ID)
 	}
 	for _, allow := range []bool{false, true} {
-		body := fmt.Sprintf(`{"max_file_mb":50,"max_batch_count":20,"storage_mode":"target:%d","allow_storage_selection":%t,"allowed_types":"png,jpg","active":true}`, targetIDs[0], allow)
-		req := httptest.NewRequest("PUT", "/api/admin/policies/"+fmt.Sprint(pid), strings.NewReader(body))
-		req.SetPathValue("id", fmt.Sprint(pid))
+		ids := "[]"
+		if allow {
+			ids = fmt.Sprintf("[%d]", targetIDs[1])
+		}
+		body := fmt.Sprintf(`{"max_file_mb":50,"max_batch_count":20,"default_storage_id":%d,"storage_ids":%s,"allowed_types":"png,jpg","active":true}`, targetIDs[0], ids)
+		req := httptest.NewRequest("PUT", "/api/admin/policies/"+fmt.Sprint(gid), strings.NewReader(body))
+		req.SetPathValue("id", fmt.Sprint(gid))
 		req.Header.Set("Authorization", "Bearer "+token)
 		rr := httptest.NewRecorder()
 		a.UpdateUploadPolicy(rr, req)
@@ -124,48 +124,34 @@ func TestGroupProfilesOnApprovedTestDB(t *testing.T) {
 			t.Fatal("policy update failed", rr.Body.String())
 		}
 		policy = a.uploadPolicyFor(user, true)
-		if policy.AllowStorageSelection != allow || policy.StorageMode != storage.TargetSelection(targetIDs[0]) {
-			t.Fatal("policy storage settings not persisted")
-		}
-		rr = call("GET", "/api/storage/options", "", a.UploadTargets)
-		if rr.Code != 200 {
-			t.Fatal(rr.Body.String())
-		}
-		var options struct {
-			Targets []struct {
-				ID      uint `json:"id"`
-				Default bool `json:"is_default"`
-			} `json:"targets"`
-		}
-		json.Unmarshal(rr.Body.Bytes(), &options)
-		if !allow && (len(options.Targets) != 1 || options.Targets[0].ID != targetIDs[0] || !options.Targets[0].Default) {
-			t.Fatal("admin bypassed group default", rr.Body.String())
+		if policy.DefaultStorageID != targetIDs[0] || (len(policy.StorageIDs) == 1) != allow {
+			t.Fatalf("policy storage settings not persisted: %+v", policy)
 		}
 		for _, admin := range []bool{false, true} {
-			req = httptest.NewRequest("POST", "/api/upload", strings.NewReader("storage_mode=default"))
+			req = httptest.NewRequest("POST", "/api/upload", strings.NewReader("storage=default"))
 			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-			chosen, _, err := a.resolveUploadTarget(req, policy, true, admin)
+			chosen, err := a.resolveUploadStorage(req, policy, true, admin)
 			if err != nil || chosen.ID != targetIDs[0] {
 				t.Fatal("group default not used", err)
 			}
-			req = httptest.NewRequest("POST", "/api/upload", strings.NewReader("storage_mode="+storage.TargetSelection(targetIDs[1])))
+			// The legacy form field and "target:" prefix still work.
+			req = httptest.NewRequest("POST", "/api/upload", strings.NewReader(fmt.Sprintf("storage_mode=target:%d", targetIDs[1])))
 			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-			_, _, err = a.resolveUploadTarget(req, policy, true, admin)
-			if (err == nil) != allow {
-				t.Fatal("group storage gate bypassed", err)
+			_, err = a.resolveUploadStorage(req, policy, true, admin)
+			if (err == nil) != (allow || admin) {
+				t.Fatalf("group storage gate wrong (allow=%v admin=%v): %v", allow, admin, err)
 			}
 		}
 	}
-	for _, allow := range []bool{false, true} {
-		policy.AllowStorageSelection = allow
-		for _, admin := range []bool{false, true} {
-			target := &storage.Target{ID: 91, Enabled: true, Configured: true, UploadAccess: "members"}
-			if storage.CanSelectTarget(target, 90, "target:90", true, admin, allow) != allow {
-				t.Fatal("selection gate bypassed")
-			}
-		}
+	// A paused storage disappears from the allow-list without editing groups.
+	if err := a.Storage.SetStatus(context.Background(), targetIDs[1], storage.StatusPaused); err != nil {
+		t.Fatal(err)
 	}
-	policy.AllowStorageSelection = false
+	pausedReq := httptest.NewRequest("POST", "/api/upload", strings.NewReader(fmt.Sprintf("storage=%d", targetIDs[1])))
+	pausedReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if _, err := a.resolveUploadStorage(pausedReq, policy, true, true); err == nil {
+		t.Fatal("paused storage accepted uploads")
+	}
 	var wg sync.WaitGroup
 	releases := make(chan func(), 4)
 	blocked := make(chan error, 4)

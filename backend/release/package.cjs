@@ -66,7 +66,7 @@ const { execFileSync } = require('node:child_process');
       const kind = execFileSync('file', ['-b', path.join(dest, 'zhuapic')], { encoding: 'utf8' });
       if (!kind.includes(arch === 'amd64' ? 'x86-64' : 'aarch64')) throw new Error(`Unexpected binary for ${arch}: ${kind}`);
       await fs.writeFile(path.join(dest, 'BUILDINFO.json'), JSON.stringify({ version: `v${version}`, platform: `linux/${arch}`,
-        image, schemaVersion: 9, binaryName: 'zhuapic', builtAt: new Date().toISOString(), runtimeDataIncluded: false }, null, 2) + '\n');
+        image, schemaVersion: 10, binaryName: 'zhuapic', builtAt: new Date().toISOString(), runtimeDataIncluded: false }, null, 2) + '\n');
       const files = await filesIn(dest);
       for (const file of files) {
         if (/(^|\/)(\.env|data|installation\.json|\.DS_Store)(\/|$)/.test(file) || /site-(logo|background)-/.test(file)) throw new Error(`Runtime file in package: ${file}`);

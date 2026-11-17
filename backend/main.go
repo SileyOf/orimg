@@ -98,15 +98,14 @@ func run() error {
 			return
 		}
 		activeDB = db
-		store := storage.NewManager(c)
-		coordinator := storage.NewCoordinator(db, c, store)
-		live.set(routes.Setup(db, c, store, coordinator))
+		service := storage.NewService(db, c, storage.NewManager(c))
+		live.set(routes.Setup(db, c, service))
 		if !c.DisableBackgroundWork {
 			start := func(fn func()) { workers.Add(1); go func() { defer workers.Done(); fn() }() }
 			start(func() {
 				storage.StartCacheJanitor(workerCtx, func() string { return utils.GetSetting(db, "s3_cache_dir", c.CacheDir) }, func() time.Duration { return utils.SettingCacheTTL(db, c.CacheTTL) }, c.CleanupInterval)
 			})
-			start(func() { coordinator.Start(workerCtx) })
+			start(func() { service.Start(workerCtx) })
 			start(func() { mailer.New(db, c.JWTSecret).Start(workerCtx) })
 		}
 	}

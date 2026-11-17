@@ -1,6 +1,6 @@
 # Origin Docker 部署
 
-镜像发布在 Docker Hub：`yuki955/orimg`，提供 Linux x86_64 (`amd64`) 和 ARM64，同一标签自动匹配架构。每个版本同时有版本号标签（如 `0.6.0`）和 `latest`；生产环境请固定版本号。镜像包含 Go 程序、前端、CA 证书、时区数据及 Oracle MySQL 8.4 的 `mysqldump` 和所需运行库，不需要在 VPS 安装 Go 或 MySQL 客户端。
+镜像发布在 Docker Hub：`yuki955/orimg`，提供 Linux x86_64 (`amd64`) 和 ARM64，同一标签自动匹配架构。每个版本同时有版本号标签（如 `0.7.0`）和 `latest`；生产环境请固定版本号。镜像包含 Go 程序、前端、CA 证书、时区数据及 Oracle MySQL 8.4 的 `mysqldump` 和所需运行库，不需要在 VPS 安装 Go 或 MySQL 客户端。
 
 数据库是独立服务，不和应用放在同一个容器。可以继续使用已有 MySQL，也可以选择附带的 Compose 数据库方案。
 
@@ -80,7 +80,7 @@ docker compose -f compose.yaml -f compose.mysql.yaml up -d
 - MySQL 方案另有 `origin_mysql-data`。切勿使用 `docker compose down -v` 做普通更新，该命令会删除数据卷。
 - 应用根文件系统只读，`/tmp` 是有容量上限的临时空间，移除容器会丢失，不能存放长期图片。自定义存储路径必须额外挂载。
 - 更新：备份数据，把 `.env` 中的 `ORIGIN_IMAGE` 改成新版本号，执行 `docker compose pull && docker compose up -d`。数据不在镜像里，不能只备份镜像。
-- v0.4.7 起数据库结构版本一直为 9，可停服后改用二进制运行（见 [迁移指南](MIGRATION.md)），继续使用原配置与数据。不要同时运行两套工作器。对后续有数据库迁移的版本，不能假设换镜像即可回退。
+- Docker 与二进制运行同一程序，可停服后互相切换（见 [迁移指南](MIGRATION.md)），继续使用原配置与数据。不要同时运行两套工作器。升级跨越数据库结构变化（例如 v0.6 → v0.7）后，只能用升级前的数据库备份回退到旧版本。
 - Docker 健康检查是存活检查，安装前也可 healthy。`/api/ready` 才表示已安装且数据库可连接；未安装或数据库故障时返回 503。启动失败应先看日志，不要删数据卷重试。
 
 ## 6. 源码构建与测试
@@ -88,7 +88,7 @@ docker compose -f compose.yaml -f compose.mysql.yaml up -d
 在 `backend/` 目录执行：
 
 ```sh
-docker buildx build --platform linux/amd64,linux/arm64 --tag yuki955/orimg:0.6.0 --provenance=false --load .
+docker buildx build --platform linux/amd64,linux/arm64 --tag yuki955/orimg:0.7.0 --provenance=false --load .
 GO_BIN=/path/to/go node docker/smoke.cjs
 node release/docker-package.cjs
 ```

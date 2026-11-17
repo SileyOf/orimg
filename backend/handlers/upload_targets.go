@@ -3,6 +3,7 @@ package handlers
 import (
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"zhuapic/models"
@@ -10,97 +11,112 @@ import (
 	"zhuapic/utils"
 )
 
-func (a *App) UploadTargets(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Cache-Control", "private, no-store")
-	user, loggedIn := a.currentUser(r)
-	if r.Header.Get("Authorization") != "" && !loggedIn {
-		utils.WriteError(w, 401, "登录已过期")
-		return
-	}
-	policy := a.uploadPolicyFor(user, loggedIn)
-	targets, err := a.Coordinator.UploadTargets(r.Context())
+// uploadChoices returns the storages a caller may upload to and the one used
+// when they do not choose. Admins may use every storage that accepts uploads;
+// everyone else is limited to their group's allow-list.
+func (a *App) uploadChoices(r *http.Request, policy models.UploadPolicy, admin bool) ([]storage.Storage, *storage.Storage, error) {
+	candidates, err := a.Storage.UploadCandidates(r.Context())
 	if err != nil {
-		utils.WriteError(w, 503, "暂时无法读取上传位置")
-		return
+		return nil, nil, err
 	}
-	admin := loggedIn && user.Role == "admin"
-	defaultID := a.Coordinator.DefaultTargetID()
-	defaultName := "默认存储"
-	if policy.StorageMode == "mirror" || defaultID == 0 {
-		defaultName = "Local + S3"
+	byID := map[uint]storage.Storage{}
+	for _, st := range candidates {
+		byID[st.ID] = st
 	}
-	out := []map[string]any{}
-	for _, t := range targets {
-		isDefault := t.ID == defaultID
-		if policy.StorageMode != "default" && policy.StorageMode != "" {
-			isDefault = policy.StorageMode == storage.TargetSelection(t.ID) || policy.StorageMode == t.LegacyMode
+	var def *storage.Storage
+	if st, ok := byID[policy.DefaultStorageID]; ok && policy.DefaultStorageID != 0 {
+		def = &st
+	} else if st, ok := byID[a.Storage.DefaultID()]; ok {
+		def = &st
+	}
+	allowed := []storage.Storage{}
+	if admin {
+		allowed = candidates
+	} else {
+		for _, id := range policy.StorageIDs {
+			if st, ok := byID[id]; ok {
+				allowed = append(allowed, st)
+			}
 		}
-		if isDefault {
-			defaultName = t.Name
-		}
-		if policy.Active && storage.CanSelectTarget(&t, defaultID, policy.StorageMode, loggedIn, admin, policy.AllowStorageSelection) {
-			out = append(out, map[string]any{"id": t.ID, "name": t.Name, "provider": t.Provider, "is_default": isDefault})
+		if def != nil {
+			found := false
+			for _, st := range allowed {
+				found = found || st.ID == def.ID
+			}
+			if !found {
+				allowed = append([]storage.Storage{*def}, allowed...)
+			}
 		}
 	}
-	utils.WriteJSON(w, 200, map[string]any{"targets": out, "default_name": defaultName, "can_upload": policy.Active, "allow_selection": policy.AllowStorageSelection})
+	return allowed, def, nil
 }
 
-func (a *App) resolveUploadTarget(r *http.Request, policy models.UploadPolicy, loggedIn, admin bool) (*storage.Target, string, error) {
+// resolveUploadStorage picks the destination for one upload. The form value
+// "storage" (or the older "storage_mode") may be "default", an ID or "target:ID".
+func (a *App) resolveUploadStorage(r *http.Request, policy models.UploadPolicy, loggedIn, admin bool) (*storage.Storage, error) {
 	if !policy.Active {
-		return nil, "", errors.New("没有有效的用户组或上传策略已停用")
+		return nil, errors.New("没有有效的用户组或上传策略已停用")
 	}
-	mode := strings.ToLower(utils.GetSetting(a.DB, "storage_mode", a.Cfg.StorageMode))
-	if policy.StorageMode != "" && policy.StorageMode != "default" {
-		mode = policy.StorageMode
-	}
-	requested := strings.TrimSpace(r.FormValue("storage_mode"))
-	if requested == "" {
-		requested = "default"
-	}
-	defaultID := a.Coordinator.DefaultTargetID()
-	var id uint
-	var err error
-	if strings.HasPrefix(requested, "target:") {
-		id, err = storage.ParseTargetSelection(requested)
-	} else if requested == "default" {
-		if strings.HasPrefix(mode, "target:") {
-			id, err = storage.ParseTargetSelection(mode)
-		} else if policy.StorageMode == "default" || policy.StorageMode == "" {
-			id = defaultID
-		}
-	} else if requested == "local" || requested == "s3" || requested == "mirror" {
-		if requested == "mirror" && mode != "mirror" {
-			return nil, "", errors.New("用户组不允许选择此存储")
-		}
-		mode = requested
-	} else {
-		return nil, "", errors.New("无效的存储选择")
-	}
+	allowed, def, err := a.uploadChoices(r, policy, admin)
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
-	if id == 0 && (mode == "local" || mode == "s3") {
-		err = a.DB.QueryRowContext(r.Context(), "SELECT id FROM storage_targets WHERE legacy_mode=?", mode).Scan(&id)
-		if err != nil {
-			return nil, "", errors.New("存储位置不可用")
+	requested := strings.TrimSpace(r.FormValue("storage"))
+	if requested == "" {
+		requested = strings.TrimSpace(r.FormValue("storage_mode"))
+	}
+	requested = strings.TrimPrefix(requested, "target:")
+	switch requested {
+	case "", "default", "local", "s3", "mirror": // legacy values mean "default"
+		if def == nil {
+			return nil, errors.New("默认存储不可用，请联系管理员")
+		}
+		return a.Storage.Get(r.Context(), def.ID)
+	}
+	id, err := strconv.ParseUint(requested, 10, 64)
+	if err != nil {
+		return nil, errors.New("无效的存储选择")
+	}
+	for _, st := range allowed {
+		if uint64(st.ID) == id {
+			return a.Storage.Get(r.Context(), st.ID)
 		}
 	}
-	if id != 0 {
-		t, err := a.Coordinator.Target(r.Context(), id)
-		if err != nil || !storage.CanSelectTarget(t, defaultID, policy.StorageMode, loggedIn, admin, policy.AllowStorageSelection) {
-			return nil, "", errors.New("存储不可用或当前用户组无权使用，请重新选择")
+	return nil, errors.New("存储不可用或当前用户组无权使用，请重新选择")
+}
+
+// UploadTargets lists the storages offered on the upload page.
+func (a *App) UploadTargets(w http.ResponseWriter, r *http.Request) {
+	user, loggedIn := a.currentUser(r)
+	if !loggedIn {
+		user, loggedIn = a.apiTokenUser(r)
+	}
+	admin := loggedIn && user.Role == "admin"
+	policy := a.uploadPolicyFor(user, loggedIn)
+	allowed, def, err := a.uploadChoices(r, policy, admin)
+	if err != nil {
+		utils.WriteError(w, 500, "无法读取存储")
+		return
+	}
+	out := []map[string]any{}
+	defaultName := ""
+	if def != nil {
+		defaultName = def.Name
+	}
+	if policy.Active {
+		for _, st := range allowed {
+			out = append(out, map[string]any{"id": st.ID, "name": st.Name, "provider": st.Provider, "is_default": def != nil && st.ID == def.ID})
 		}
-		return t, t.Mode(), nil
 	}
-	if mode != "mirror" {
-		return nil, "", errors.New("默认存储未配置")
-	}
-	// Mirror is retained for older fixed policies, but no longer offered as a storage location.
-	for _, legacy := range []string{"local", "s3"} {
-		var enabled bool
-		if err := a.DB.QueryRowContext(r.Context(), "SELECT enabled FROM storage_targets WHERE legacy_mode=?", legacy).Scan(&enabled); err != nil || !enabled {
-			return nil, "", errors.New("双副本存储不可用")
+	response := map[string]any{"targets": out, "default_name": defaultName, "can_upload": policy.Active && def != nil, "allow_selection": len(out) > 1}
+	if loggedIn {
+		// Names for image filters; storages hold no sensitive information here.
+		all := []map[string]any{}
+		for id, item := range a.storageNames(r) {
+			_ = id
+			all = append(all, item)
 		}
+		response["storages"] = all
 	}
-	return nil, mode, nil
+	utils.WriteJSON(w, 200, response)
 }

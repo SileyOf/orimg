@@ -14,7 +14,7 @@
 name: origin
 services:
   origin:
-    image: ${ORIGIN_IMAGE:-yuki955/orimg:0.6.0}
+    image: ${ORIGIN_IMAGE:-yuki955/orimg:0.7.0}
     pull_policy: missing
     restart: unless-stopped
     network_mode: host

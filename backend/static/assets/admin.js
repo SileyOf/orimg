@@ -53,14 +53,6 @@ const els = {
   metricJobsQueued: $("#metricJobsQueued"),
   metricVersion: $("#metricVersion"),
   activityChart: $("#activityChart"),
-  localReplicaCount: $("#localReplicaCount"),
-  localReplicaSize: $("#localReplicaSize"),
-  s3ReplicaCount: $("#s3ReplicaCount"),
-  s3ReplicaSize: $("#s3ReplicaSize"),
-  replicaPendingCount: $("#replicaPendingCount"),
-  replicaFailureCount: $("#replicaFailureCount"),
-  diskUsageValue: $("#diskUsageValue"),
-  diskUsageLimit: $("#diskUsageLimit"),
   reloadStorage: $("#reloadStorage"),
   storageJobs: $("#storageJobs"),
   runDatabaseBackup: $("#runDatabaseBackup"),
@@ -231,11 +223,10 @@ async function enterAdmin() {
 async function loadSettings() {
   const data = await request("/api/admin/settings");
   const settings = data.settings || {};
-  const targets = await request("/api/admin/storage/targets");
+  const storages = await request("/api/admin/storages");
   const backupTarget = $("#databaseBackupTarget");
-  backupTarget.replaceChildren(new Option("原 S3 存储（兼容旧配置）", "0"));
-  (targets.targets || []).forEach((target) => backupTarget.add(new Option(`${target.name}${target.enabled ? "" : "（已停用）"}`, String(target.id))));
-  if (settings.db_backup_target_id && !Array.from(backupTarget.options).some((option) => option.value === settings.db_backup_target_id)) backupTarget.add(new Option("原备份存储不可用", settings.db_backup_target_id));
+  backupTarget.replaceChildren(new Option("未选择", "0"));
+  (storages.storages || []).filter((s) => s.status !== "draining").forEach((s) => backupTarget.add(new Option(`${s.name}${s.status === "active" ? "" : "（已暂停）"}`, String(s.id))));
   fillForm(els.siteForm, settings);
   els.siteForm.elements.default_accent_color.value = settings.default_accent_color || "lime";
   els.siteForm.elements.background_overlay.value = settings.background_overlay || "82";
@@ -243,7 +234,7 @@ async function loadSettings() {
   window.ZhuaAppearance.setSiteDefault(settings.default_accent_color);
   fillForm(els.securityForm, settings);
   fillForm(els.storageForm, settings);
-  backupTarget.value = settings.db_backup_target_id || "0";
+  backupTarget.value = settings.db_backup_storage_id || "0";
   applyBrand(settings);
   window.OrimgBackground.syncEditor();
   if (settings.user_path) els.dashboardLink.href = settings.user_path;
@@ -357,8 +348,8 @@ async function uploadLogo(file) {
 
 async function loadGroups() {
   const data = await request("/api/admin/groups");
-  const storage = await request("/api/admin/storage/targets");
-  state.storageTargets = storage.targets || [];
+  const storage = await request("/api/admin/storages");
+  state.storageTargets = storage.storages || [];
   state.groups = data.groups || [];
   state.guestGroupID = Number(data.guest_group_id || 0);
   const assignableOptions = state.groups
@@ -451,8 +442,17 @@ function renderAudit() {
     "images.bulk_deleted": "批量删除图片",
     "image.restored": "恢复图片",
     "image.purged": "永久清理图片",
-    "storage_job.created": "创建存储任务",
-    "storage_job.controlled": "控制存储任务",
+    "storage.created": "新增存储",
+    "storage.updated": "修改存储",
+    "storage.default": "设置默认上传位置",
+    "storage.probe": "测试存储连接",
+    "storage.pause": "暂停存储",
+    "storage.resume": "恢复存储",
+    "storage.retry": "重试异常副本",
+    "storage.verify": "校验存储副本",
+    "storage.drain_started": "开始移除存储",
+    "storage.force_removed": "强制移除存储",
+    "operation.cancelled": "取消后台任务",
     "database_backup.created": "创建数据库备份",
   };
   els.auditList.innerHTML = state.auditLogs.map((item) => `
@@ -466,15 +466,15 @@ function renderAudit() {
 
 const groupViews = window.OrimgViews.setup("groupsGrid", "groupViewTools", "orimg.groupView", "list");
 function groupStorageName(policy) {
-  const target=(state.storageTargets || []).find(t => policy.storage_mode === "target:"+t.id || (t.legacy_mode && policy.storage_mode === t.legacy_mode));
-  return target?.name || (policy.storage_mode === "mirror" ? "Local + S3" : "跟随站点");
+  const target=(state.storageTargets || []).find(t => t.id === Number(policy.default_storage_id));
+  return target?.name || "跟随站点默认";
 }
 function renderGroups() {
   els.groupsGrid.innerHTML = '<div class="group-columns" aria-hidden="true"><span>用户组</span><span>成员</span><span>单图 / 批量</span><span class="group-quota">总配额</span><span>上传位置</span><span>状态</span></div>' + state.groups.map((group) => {
     const policy = group.policy || {};
     const destination=groupStorageName(policy);
     return `<article class="group-entry" data-catalog-row data-group-id="${group.id}" data-search="${escapeAttr(group.name+' '+destination)}" data-filter="${policy.active ? 'enabled' : 'paused'}">
-      <div class="group-summary" role="button" tabindex="0" aria-haspopup="dialog" aria-label="编辑用户组 ${escapeAttr(group.name)}"><div class="group-name"><strong>${escapeHTML(group.name)}</strong><small>${Number(group.id) === state.guestGroupID ? '游客使用此组' : policy.allow_storage_selection ? '可自选开放存储' : '仅默认存储'}</small></div>
+      <div class="group-summary" role="button" tabindex="0" aria-haspopup="dialog" aria-label="编辑用户组 ${escapeAttr(group.name)}"><div class="group-name"><strong>${escapeHTML(group.name)}</strong><small>${Number(group.id) === state.guestGroupID ? '游客使用此组' : (policy.storage_ids || []).length ? `可选 ${(policy.storage_ids || []).length} 个存储` : '仅默认存储'}</small></div>
       <div><small>成员</small><span>${group.member_count || 0}</span></div>
       <div><small>单图 / 批量</small><span>${policy.max_file_mb || 1} MB / ${policy.max_batch_count || 1} 张</span></div>
       <div class="group-quota"><small>总配额</small><span>${policy.total_quota_bytes ? prettyBytes(policy.total_quota_bytes) : '不限'}</span></div>
@@ -530,18 +530,17 @@ function groupPolicyForm(group) {
           <label>每日流量 GB<input name="max_daily_gb" type="number" min="0" step="0.1" value="${bytesToGB(policy.max_daily_bytes)}"></label>
           <label>总配额 GB<input name="total_quota_gb" type="number" min="0" step="0.1" value="${bytesToGB(policy.total_quota_bytes)}"></label>
           <label>图片保留天数<input name="retention_days" type="number" min="0" max="3650" value="${policy.retention_days || 0}"><span class="inline-help">0 表示永久</span></label>
-          <label>默认上传位置<select name="storage_mode">
-            <option value="default"${policy.storage_mode === "default" ? " selected" : ""}>跟随站点默认</option>
-            ${(state.storageTargets || []).map(target => {
-              const selected = policy.storage_mode === "target:" + target.id || (target.legacy_mode && policy.storage_mode === target.legacy_mode);
-              return `<option value="target:${target.id}"${selected ? " selected" : ""}${!target.enabled || target.configured === false ? " disabled" : ""}>${escapeHTML(target.name)}</option>`;
-            }).join("")}
-            ${policy.storage_mode === "mirror" ? '<option value="mirror" selected>Local + S3（原双副本策略）</option>' : ""}
+          <label>默认上传位置<select name="default_storage_id">
+            <option value="0"${!policy.default_storage_id ? " selected" : ""}>跟随站点默认</option>
+            ${uploadableStorages().map(target => `<option value="${target.id}"${Number(policy.default_storage_id) === target.id ? " selected" : ""}>${escapeHTML(target.name)}</option>`).join("")}
           </select></label>
         </div>
+        <fieldset class="policy-storages"><legend>成员上传时可选择的存储</legend>
+          ${uploadableStorages().map(target => `<label class="switch-line"><span>${escapeHTML(target.name)}</span><input name="storage_ids" value="${target.id}" type="checkbox"${(policy.storage_ids || []).includes(target.id) ? " checked" : ""}></label>`).join("") || '<p class="inline-help">没有可上传的存储。</p>'}
+          <p class="inline-help">不勾选时成员只能使用默认位置。管理员始终可以选择所有可上传的存储。</p>
+        </fieldset>
         <label>允许格式<input name="allowed_types" value="${escapeAttr(policy.allowed_types || "")}"></label>
         <div class="policy-switches">
-          <label class="switch-line"><span>允许自选开放存储</span><input name="allow_storage_selection" type="checkbox"${policy.allow_storage_selection ? " checked" : ""}></label>
           <label class="switch-line"><span>允许 SVG</span><input name="allow_svg" type="checkbox"${policy.allow_svg ? " checked" : ""}></label>
           <label class="switch-line"><span>允许 API Token</span><input name="allow_api" type="checkbox"${policy.allow_api ? " checked" : ""}></label>
           <label class="switch-line"><span>策略启用</span><input name="active" type="checkbox"${policy.active ? " checked" : ""}></label>
@@ -552,6 +551,10 @@ function groupPolicyForm(group) {
           <button class="primary-button compact" type="submit">保存更改</button>
         </div>
       </form>`;
+}
+
+function uploadableStorages() {
+  return (state.storageTargets || []).filter(target => target.status === "active" && target.accept_uploads && target.configured !== false);
 }
 
 function bytesToGB(bytes) {
@@ -571,8 +574,8 @@ async function savePolicy(form) {
     max_daily_uploads: Number(fields.get("max_daily_uploads")),
     max_daily_bytes: gbToBytes(fields.get("max_daily_gb")),
     total_quota_bytes: gbToBytes(fields.get("total_quota_gb")),
-    storage_mode: String(fields.get("storage_mode") || "default"),
-    allow_storage_selection: form.elements.allow_storage_selection.checked,
+    default_storage_id: Number(fields.get("default_storage_id") || 0),
+    storage_ids: fields.getAll("storage_ids").map(Number),
     retention_days: Number(fields.get("retention_days") || 0),
     allowed_types: String(fields.get("allowed_types") || ""),
     allow_svg: form.elements.allow_svg.checked,
@@ -787,66 +790,58 @@ async function loadImages(reset = true) {
   }
 }
 async function loadStorageOverview() {
-	window.OrimgStorage?.reload();
+  window.OrimgStorage?.reload();
+  await loadOperations();
+}
+
+async function loadOperations() {
   if (!state.token) return;
   try {
-    const data = await request("/api/admin/storage");
-    const stats = data.stats || {};
-    els.localReplicaCount.textContent = `${stats.local_ready || 0} 份`;
-    els.localReplicaSize.textContent = prettyBytes(stats.local_bytes || 0);
-    els.s3ReplicaCount.textContent = `${stats.s3_ready || 0} 份`;
-    els.s3ReplicaSize.textContent = prettyBytes(stats.s3_bytes || 0);
-    els.replicaPendingCount.textContent = String(stats.pending || 0);
-    els.replicaFailureCount.textContent = `${stats.failed || 0} 个异常`;
-    const usage = Number(stats.disk_used_percent || 0);
-    els.diskUsageValue.textContent = stats.disk_used_percent == null ? "未知" : `${usage.toFixed(1)}%`;
-    els.diskUsageLimit.textContent = `安全线 ${stats.disk_stop_percent || 85}%`;
-    els.diskUsageValue.classList.toggle("danger-text", usage >= Number(stats.disk_stop_percent || 85));
-    renderStorageJobs(data.jobs || []);
+    const data = await request("/api/admin/operations");
+    renderOperations(data.operations || []);
   } catch (err) {
     if (!els.adminLayout.hidden) showMessage(els.adminMessage, err.message, false);
   }
 }
+window.OrimgOperations = { reload: loadOperations };
+let operationsTimer = 0;
+window.addEventListener("origin:storages", (event) => {
+  const select = els.adminImageStorage, current = select.value;
+  select.replaceChildren(new Option("全部", ""), ...event.detail.map((s) => new Option(s.name, String(s.id))), new Option("无可用副本", "none"));
+  select.value = Array.from(select.options).some((option) => option.value === current) ? current : "";
+});
 
-function renderStorageJobs(jobs) {
-  if (!jobs.length) {
-    els.storageJobs.innerHTML = '<div class="storage-job-empty">暂无副本同步、校验或备份任务</div>';
+function renderOperations(ops) {
+  clearTimeout(operationsTimer);
+  if (ops.some((op) => op.status === "queued" || op.status === "running")) {
+    operationsTimer = setTimeout(() => { window.OrimgStorage?.reload(); loadOperations(); }, 5000);
+  }
+  if (!ops.length) {
+    els.storageJobs.innerHTML = '<div class="storage-job-empty">暂无迁出、校验或备份任务</div>';
     return;
   }
-  els.storageJobs.innerHTML = jobs
-    .map((job) => {
-      if (job.type === "db_backup" && job.status === "completed") job = { ...job, total_items: 1, processed_items: 1, success_items: 1, failed_items: 0 };
-      const total = Number(job.total_items || 0);
-      const done = Number(job.success_items || 0) + Number(job.failed_items || 0);
-      const percent = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 100;
-      const isLocalTarget = job.target_mode === "local";
-      const title = job.type === "verify" ? "校验现有副本" : job.type === "db_backup" ? "数据库逻辑备份" : isLocalTarget ? "补齐本地副本" : "补齐云端副本";
-      const detail = job.type === "verify"
-        ? "读取现有文件并比对完整性，不写入也不删除文件。"
-        : job.type === "db_backup"
-          ? `MySQL 完整逻辑备份 · ${$("#databaseBackupTarget").querySelector(`option[value="${String(job.target_mode).replace("target:", "")}"]`)?.textContent || (job.target_mode === "s3" ? "原 S3 存储" : job.target_mode)}`
-          : `${job.source_mode === "s3" ? "S3" : "Local"} → ${isLocalTarget ? "Local" : "S3"}，仅复制缺失副本，源文件保留。`;
-      const status = storageJobStatus(job.status);
-      const completedWithoutWork = job.status === "completed" && total === 0;
-      const progressCopy = completedWithoutWork
-        ? "目标端已完整，无需复制"
-        : `${Number(job.success_items || 0).toLocaleString("zh-CN")} 成功 · ${Number(job.failed_items || 0).toLocaleString("zh-CN")} 失败 · ${Math.max(0, total - done).toLocaleString("zh-CN")} 待处理`;
-      let action = "";
-      if (job.type !== "db_backup" && (job.status === "running" || job.status === "queued")) action = `<button data-job-action="pause" data-job-id="${job.id}" type="button">暂停</button>`;
-      if (job.status === "paused") action = `<button data-job-action="resume" data-job-id="${job.id}" type="button">继续</button>`;
-      if (job.status === "completed_with_errors") action = `<button data-job-action="retry" data-job-id="${job.id}" type="button">${job.type === "db_backup" ? "重新备份" : "重试失败项"}</button>`;
-      return `
-        <article class="storage-job-row">
-          <div class="storage-job-main">
-            <div class="storage-job-title"><strong>${escapeHTML(title)}</strong><span class="job-status status-${escapeAttr(job.status)}">${status}</span></div>
-            <p>${escapeHTML(detail)}</p>
-            <div class="storage-job-track"><i style="width:${percent}%"></i></div>
-            <div class="storage-job-foot"><small>${escapeHTML(progressCopy)} · ${prettyBytes(job.processed_bytes || 0)} / ${prettyBytes(job.total_bytes || 0)}${job.last_error ? ` · ${escapeHTML(job.last_error)}` : ""}</small><time>${job.created_at ? escapeHTML(new Date(job.created_at).toLocaleString("zh-CN")) : ""}</time></div>
-          </div>
-          <div class="storage-job-action">${action}</div>
-        </article>`;
-    })
-    .join("");
+  const titles = { drain: "移除存储：迁出图片", verify: "校验副本", db_backup: "数据库备份", remove: "强制移除存储" };
+  els.storageJobs.innerHTML = ops.map((op) => {
+    const total = Number(op.total || 0), done = Number(op.done || 0);
+    const percent = op.status === "done" ? 100 : total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
+    const subject = op.storage_name || (op.storage_id ? `存储 #${op.storage_id}` : "");
+    const progress = op.kind === "db_backup" || op.kind === "remove" ? "" : `${done.toLocaleString("zh-CN")} / ${total.toLocaleString("zh-CN")}${op.failed ? ` · ${Number(op.failed).toLocaleString("zh-CN")} 异常` : ""}`;
+    const cancellable = op.status === "queued" || (op.status === "running" && op.kind !== "db_backup");
+    return `
+      <article class="storage-job-row">
+        <div class="storage-job-main">
+          <div class="storage-job-title"><strong>${escapeHTML(titles[op.kind] || op.kind)}${subject ? ` · ${escapeHTML(subject)}` : ""}</strong><span class="job-status status-${escapeAttr(op.status)}">${operationStatus(op.status)}</span></div>
+          ${op.message ? `<p>${escapeHTML(op.message)}</p>` : ""}
+          ${op.kind === "remove" ? "" : `<div class="storage-job-track"><i style="width:${percent}%"></i></div>`}
+          <div class="storage-job-foot"><small>${escapeHTML(progress)}</small><time>${op.created_at ? escapeHTML(new Date(op.created_at).toLocaleString("zh-CN")) : ""}</time></div>
+        </div>
+        <div class="storage-job-action">${cancellable ? `<button data-job-action="cancel" data-job-id="${op.id}" type="button">取消</button>` : ""}</div>
+      </article>`;
+  }).join("");
+}
+
+function operationStatus(status) {
+  return ({ queued: "等待中", running: "进行中", done: "已完成", failed: "失败", cancelled: "已取消" })[status] || status;
 }
 
 async function runDatabaseBackup() {
@@ -863,19 +858,10 @@ async function runDatabaseBackup() {
   }
 }
 
-function storageJobStatus(status) {
-  return ({
-    queued: "等待中",
-    running: "进行中",
-    paused: "已暂停",
-    completed: "已完成",
-    completed_with_errors: "部分失败",
-  })[status] || status;
-}
-
 async function controlStorageJob(id, action) {
+  if (action === "cancel" && !confirm("取消这个任务？移除存储会停止并保留该存储（已暂停），已复制的图片保留。")) return;
   try {
-    await request(`/api/admin/storage/jobs/${id}`, {
+    await request(`/api/admin/operations/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action }),

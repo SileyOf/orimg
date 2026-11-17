@@ -3,6 +3,7 @@ package storage
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -157,19 +158,19 @@ func TestManagerWebDAVSaveReadDelete(t *testing.T) {
 	defer server.Close()
 	dir := t.TempDir()
 	manager := NewManager(&config.Config{UploadDir: dir + "/uploads", CacheDir: dir + "/cache"})
-	target := &Target{Name: "NAS", Provider: "webdav", Config: TargetConfig{Endpoint: server.URL + "/dav/", Prefix: "/origin/", AccessKey: "alice", SecretKey: "s3cret"}}
-	if err := ValidateTarget(target); err == nil {
+	st := &Storage{Name: "NAS", Provider: "webdav", Config: StorageConfig{Endpoint: server.URL + "/dav/", Prefix: "/origin/", AccessKey: "alice", SecretKey: "s3cret"}}
+	if err := st.Validate(); err == nil {
 		t.Fatal("absolute prefix accepted")
 	}
-	target.Config.Prefix = "origin/"
-	if err := ValidateTarget(target); err != nil || target.Config.Prefix != "origin" || target.Config.Endpoint != server.URL+"/dav" {
-		t.Fatalf("validation: %v %+v", err, target.Config)
+	st.Config.Prefix = "origin/"
+	if err := st.Validate(); err != nil || st.Config.Prefix != "origin" || st.Config.Endpoint != server.URL+"/dav" {
+		t.Fatalf("validation: %v %+v", err, st.Config)
 	}
-	opts := (&Coordinator{manager: manager, cfg: &config.Config{}}).targetOptionsFrom(manager.DefaultOptions(), target)
-	if !manager.Configured("webdav", opts) || target.Mode() != "webdav" {
-		t.Fatal("webdav target not configured")
+	opts := st.Options(manager.DefaultOptions())
+	if !manager.Configured("webdav", opts) || st.Mode() != "webdav" || opts.S3.Endpoint != "" {
+		t.Fatal("webdav storage not configured")
 	}
-	image := &models.Image{PublicName: "abc.png", MimeType: "image/png", StorageMode: "webdav", CreatedAt: time.Now()}
+	image := &models.Image{PublicName: "abc.png", MimeType: "image/png", CreatedAt: time.Now()}
 	body := []byte("png-data")
 	if err := manager.SaveReader(context.Background(), opts, "webdav", image, bytes.NewReader(body), int64(len(body)), ""); err != nil {
 		t.Fatal(err)
@@ -177,14 +178,19 @@ func TestManagerWebDAVSaveReadDelete(t *testing.T) {
 	if !strings.HasPrefix(image.StorageKey, "origin/") || !strings.HasSuffix(image.StorageKey, "/abc.png") {
 		t.Fatalf("unexpected key %q", image.StorageKey)
 	}
-	got, err := manager.ReadBytes(context.Background(), opts, "webdav", image.StorageKey)
-	if err != nil || !bytes.Equal(got, body) {
-		t.Fatalf("read: %q %v", got, err)
+	reader, err := manager.Open(context.Background(), opts, "webdav", image.StorageKey)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if err = manager.Delete(context.Background(), opts, image); err != nil || len(dav.files) != 0 {
+	got, _ := io.ReadAll(reader)
+	reader.Close()
+	if !bytes.Equal(got, body) {
+		t.Fatalf("read: %q", got)
+	}
+	if err = manager.DeleteObject(context.Background(), opts, "webdav", image.StorageKey); err != nil || len(dav.files) != 0 {
 		t.Fatalf("delete: %v, remaining %d", err, len(dav.files))
 	}
-	if key := manager.ReplicaKey(opts, "webdav", image.CreatedAt, image.PublicName); !strings.HasPrefix(key, "origin/") {
-		t.Fatalf("replica key %q", key)
+	if _, err = manager.Open(context.Background(), opts, "webdav", image.StorageKey); !errors.Is(err, ErrObjectNotFound) {
+		t.Fatalf("missing object should be ErrObjectNotFound, got %v", err)
 	}
 }

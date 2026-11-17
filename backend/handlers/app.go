@@ -25,10 +25,9 @@ import (
 )
 
 type App struct {
-	DB          *sql.DB
-	Cfg         *config.Config
-	Store       *storage.Manager
-	Coordinator *storage.Coordinator
+	DB      *sql.DB
+	Cfg     *config.Config
+	Storage *storage.Service
 }
 
 type loginRequest struct {
@@ -82,28 +81,19 @@ var editableSettingKeys = map[string]bool{
 	"admin_path":             true,
 	"user_path":              true,
 	"public_upload_enabled":  true,
-	"storage_mode":           true,
 	"max_upload_mb":          true,
 	"cache_ttl_days":         true,
 	"disk_stop_percent":      true,
 	"recycle_bin_days":       true,
 	"replica_worker_enabled": true,
 	"db_backup_enabled":      true,
-	"db_backup_target_id":    true,
+	"db_backup_storage_id":   true,
 	"db_backup_hour":         true,
 	"db_backup_s3_prefix":    true,
 	"mysqldump_path":         true,
 	"allowed_types":          true,
-	"local_upload_dir":       true,
 	"s3_cache_dir":           true,
 	"thumb_dir":              true,
-	"s3_endpoint":            true,
-	"s3_region":              true,
-	"s3_bucket":              true,
-	"s3_access_key":          true,
-	"s3_secret_key":          true,
-	"s3_force_path_style":    true,
-	"s3_key_prefix":          true,
 	"login_captcha_enabled":  true,
 	"upload_rate_per_min":    true,
 	"image_rate_per_min":     true,
@@ -172,7 +162,10 @@ func (a *App) PublicSettings(w http.ResponseWriter, r *http.Request) {
 		out[key] = all[key]
 	}
 	out["app_version"] = config.AppVersion
-	out["s3_configured"] = a.Store.S3Configured(a.storageOptions())
+	out["storage_mode"] = ""
+	if st, err := a.Storage.Get(r.Context(), a.Storage.DefaultID()); err == nil {
+		out["storage_mode"] = st.Name // shown on the upload page
+	}
 	out["upload_mode"] = "classic"
 	out["upload_policy"] = publicPolicy(a.uploadPolicyFor(nil, false))
 	utils.WriteJSON(w, http.StatusOK, out)
@@ -181,17 +174,10 @@ func (a *App) PublicSettings(w http.ResponseWriter, r *http.Request) {
 func (a *App) AdminSettings(w http.ResponseWriter, r *http.Request) {
 	all := utils.GetSettings(a.DB)
 	opts := a.storageOptions()
-	all["s3_configured"] = strconv.FormatBool(a.Store.S3Configured(opts))
 	all["base_url"] = a.Cfg.BaseURL
-	all["upload_dir"] = opts.UploadDir
 	all["cache_dir"] = opts.CacheDir
+	all["thumb_dir"] = opts.ThumbDir
 	all["app_version"] = config.AppVersion
-	if all["s3_secret_key"] != "" {
-		all["s3_secret_key_set"] = "true"
-		all["s3_secret_key"] = ""
-	} else {
-		all["s3_secret_key_set"] = "false"
-	}
 	utils.WriteJSON(w, http.StatusOK, map[string]any{"settings": all})
 }
 
@@ -203,31 +189,15 @@ func (a *App) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 	}
 
 	updated := map[string]string{}
-	if raw, ok := payload["db_backup_target_id"]; ok && raw != "0" && raw != "" {
+	if raw, ok := payload["db_backup_storage_id"]; ok && raw != "0" && raw != "" {
 		id, err := strconv.ParseUint(raw, 10, 31)
-		if err != nil || id == 0 || a.Coordinator == nil {
+		if err != nil || id == 0 {
 			utils.WriteError(w, 400, "无效备份存储")
 			return
 		}
-		unlock, err := a.Coordinator.LockTargetConfig(r.Context())
-		if err != nil {
-			utils.WriteError(w, 409, "存储配置正在更新")
-			return
-		}
-		defer unlock()
-		target, err := a.Coordinator.Target(r.Context(), uint(id))
-		if err != nil || !target.Enabled {
-			utils.WriteError(w, 400, "备份存储不存在或已停用")
-			return
-		}
-		if !a.Store.Configured(target.Mode(), a.Coordinator.TargetOptions(target)) {
-			utils.WriteError(w, 400, "备份存储配置不完整")
-			return
-		}
-	}
-	if a.Coordinator != nil {
-		if err := a.Coordinator.CheckLegacyLocationChanges(r.Context(), payload); err != nil {
-			utils.WriteError(w, http.StatusConflict, err.Error())
+		target, err := a.Storage.Get(r.Context(), uint(id))
+		if err != nil || target.Status == storage.StatusDraining || !target.Configured {
+			utils.WriteError(w, 400, "备份存储不存在、正在移除或配置不完整")
 			return
 		}
 	}
@@ -235,18 +205,7 @@ func (a *App) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 		if !editableSettingKeys[key] {
 			continue
 		}
-		if key == "s3_secret_key" && strings.TrimSpace(value) == "" {
-			continue
-		}
 		value = sanitizeSetting(key, value, a.Cfg)
-		if key == "s3_secret_key" {
-			encrypted, err := utils.EncryptSecret(value, a.Cfg.JWTSecret)
-			if err != nil {
-				utils.WriteError(w, http.StatusInternalServerError, "failed to protect s3 secret")
-				return
-			}
-			value = encrypted
-		}
 		if err := utils.UpsertSetting(a.DB, key, value); err != nil {
 			utils.WriteError(w, http.StatusInternalServerError, "failed to save settings")
 			return
@@ -424,37 +383,16 @@ func (a *App) createImageFromUpload(w http.ResponseWriter, r *http.Request, head
 		utils.WriteError(w, http.StatusInternalServerError, "failed to create image name")
 		return
 	}
-	opts := a.storageOptions()
-	uploadTarget, mode, targetErr := a.resolveUploadTarget(r, policy, user != nil, isAdmin)
+	target, targetErr := a.resolveUploadStorage(r, policy, user != nil, isAdmin)
 	if targetErr != nil {
 		utils.WriteError(w, http.StatusForbidden, targetErr.Error())
 		return
 	}
-	if uploadTarget != nil {
-		opts = a.Coordinator.TargetOptions(uploadTarget)
-		if uploadTarget.LegacyMode != "" {
-			uploadTarget = nil
-		}
-	}
-	if (mode == "s3" || mode == "mirror") && !a.Store.S3Configured(opts) {
-		utils.WriteError(w, http.StatusBadRequest, "s3 is not configured")
+	opts := a.Storage.Options(target)
+	mode := target.Mode()
+	if err := a.Storage.CheckCapacity(target); err != nil {
+		utils.WriteError(w, http.StatusInsufficientStorage, err.Error())
 		return
-	}
-	if mode == "webdav" && !a.Store.Configured(mode, opts) {
-		utils.WriteError(w, http.StatusBadRequest, "webdav is not configured")
-		return
-	}
-	if (mode == "local" || mode == "mirror") && a.Coordinator != nil {
-		var capacityErr error
-		if uploadTarget != nil {
-			capacityErr = a.Coordinator.CheckTargetCapacity(uploadTarget)
-		} else {
-			capacityErr = a.Coordinator.CheckLocalCapacity()
-		}
-		if err := capacityErr; err != nil {
-			utils.WriteError(w, http.StatusInsufficientStorage, err.Error())
-			return
-		}
 	}
 	releaseQuota, err := a.reserveUploadQuota(r.Context(), user, policy, imageSize)
 	if err != nil {
@@ -493,7 +431,6 @@ func (a *App) createImageFromUpload(w http.ResponseWriter, r *http.Request, head
 		Size:         imageSize,
 		Width:        width,
 		Height:       height,
-		StorageMode:  mode,
 		UserID:       0,
 		UploadIP:     a.clientIP(r),
 		IsAnimated:   isAnimated,
@@ -506,9 +443,9 @@ func (a *App) createImageFromUpload(w http.ResponseWriter, r *http.Request, head
 		image.UserID = user.ID
 		image.Username = user.Username
 	}
-	if err := a.Store.SaveReader(r.Context(), opts, mode, &image, reader, image.Size, checksum); err != nil {
+	if err := a.Storage.Manager().SaveReader(r.Context(), opts, mode, &image, reader, image.Size, checksum); err != nil {
 		// Storage errors can include filesystem paths or S3 responses.
-		log.Printf("upload: storing %s (%s) failed: %v", image.PublicName, mode, err)
+		log.Printf("upload: storing %s on %q failed: %v", image.PublicName, target.Name, err)
 		utils.WriteError(w, http.StatusInternalServerError, "failed to store image")
 		return
 	}
@@ -516,30 +453,23 @@ func (a *App) createImageFromUpload(w http.ResponseWriter, r *http.Request, head
 		a.createThumbnails(&image, inspectBody)
 	}
 	if err := a.insertImage(&image); err != nil {
-		_ = a.Store.Delete(r.Context(), opts, &image)
+		a.Storage.DiscardUpload(r.Context(), target, image.StorageKey)
 		a.deleteThumbnails(&image)
 		utils.WriteError(w, http.StatusInternalServerError, "failed to save image record")
 		return
 	}
-	if a.Coordinator != nil {
-		var registerErr error
-		if uploadTarget != nil {
-			registerErr = a.Coordinator.RegisterTargetImage(r.Context(), &image, uploadTarget, checksum)
-		} else {
-			registerErr = a.Coordinator.RegisterImage(r.Context(), &image, checksum)
-		}
-		if err := registerErr; err != nil {
-			_ = a.Store.Delete(r.Context(), opts, &image)
-			a.deleteThumbnails(&image)
-			_, _ = a.DB.Exec(`DELETE FROM images WHERE id = ?`, image.ID)
-			utils.WriteError(w, http.StatusInternalServerError, "failed to register storage replica")
-			return
-		}
+	if err := a.Storage.RegisterUpload(r.Context(), &image, target, checksum); err != nil {
+		a.Storage.DiscardUpload(r.Context(), target, image.StorageKey)
+		a.deleteThumbnails(&image)
+		_, _ = a.DB.Exec(`DELETE FROM images WHERE id = ?`, image.ID)
+		utils.WriteError(w, http.StatusInternalServerError, "failed to register image copy")
+		return
 	}
+	image.CopyIDs = strconv.FormatUint(uint64(target.ID), 10)
 	baseURL := a.requestBaseURL(r)
 	url := imageURL(baseURL, image.PublicName)
 	utils.WriteJSON(w, http.StatusOK, map[string]any{
-		"image":    a.imageResponse(&image, baseURL),
+		"image":    a.imageResponse(&image, baseURL, a.storageNames(r)),
 		"url":      url,
 		"markdown": "![](" + url + ")",
 		"html":     `<img src="` + url + `" alt="">`,
@@ -562,59 +492,13 @@ func (a *App) ServeImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var filePath string
-	opts := a.storageOptions()
-	var named bool
-	if a.Coordinator != nil {
-		var loadErr error
-		filePath, named, loadErr = a.Coordinator.NamedImagePath(r.Context(), image)
-		if loadErr != nil {
-			utils.WriteError(w, http.StatusBadGateway, "failed to load verified storage replica")
-			return
-		}
+	filePath, source, err := a.Storage.ServePath(r.Context(), image)
+	if err != nil {
+		log.Printf("serve %s: %v", image.PublicName, err)
+		utils.WriteError(w, http.StatusBadGateway, "image is temporarily unavailable")
+		return
 	}
-	if named {
-		w.Header().Set("X-Orimg-Storage", "named")
-	} else if image.StorageMode == "mirror" && a.Coordinator != nil {
-		localPath, hit, err := a.Coordinator.EnsureMirrorLocal(r.Context(), image)
-		if err != nil {
-			utils.WriteError(w, http.StatusBadGateway, "failed to load healthy image replica")
-			return
-		}
-		filePath = localPath
-		if hit {
-			w.Header().Set("X-ZhuaPic-Replica", "LOCAL")
-		} else {
-			w.Header().Set("X-ZhuaPic-Replica", "REPAIRED")
-		}
-	} else if image.StorageMode == "s3" {
-		if a.Coordinator != nil {
-			if replicaKey, keyErr := a.Coordinator.ReadyReplicaKey(r.Context(), image.ID, "s3"); keyErr == nil {
-				image.StorageKey = replicaKey
-			}
-		}
-		ttl := utils.SettingCacheTTL(a.DB, a.Cfg.CacheTTL)
-		cachePath, hit, err := a.Store.EnsureS3Cache(r.Context(), opts, image, ttl)
-		if err != nil {
-			utils.WriteError(w, http.StatusBadGateway, "failed to load image from storage")
-			return
-		}
-		filePath = cachePath
-		if hit {
-			w.Header().Set("X-ZhuaPic-Cache", "HIT")
-		} else {
-			w.Header().Set("X-ZhuaPic-Cache", "MISS")
-		}
-	} else {
-		localKey := image.StorageKey
-		if a.Coordinator != nil {
-			if replicaKey, keyErr := a.Coordinator.ReadyReplicaKey(r.Context(), image.ID, "local"); keyErr == nil {
-				localKey = replicaKey
-			}
-		}
-		filePath = a.Store.LocalPath(opts, localKey)
-	}
-
+	w.Header().Set("X-Origin-Source", source)
 	w.Header().Set("Content-Type", image.MimeType)
 	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
@@ -685,9 +569,11 @@ func (a *App) ListImages(w http.ResponseWriter, r *http.Request) {
 		utils.WriteError(w, http.StatusBadRequest, "image search is too long")
 		return
 	}
-	if filter.Storage != "" && filter.Storage != "local" && filter.Storage != "s3" && filter.Storage != "mirror" && filter.Storage != "webdav" {
-		utils.WriteError(w, http.StatusBadRequest, "invalid storage filter")
-		return
+	if filter.Storage != "" && filter.Storage != "none" {
+		if id, err := strconv.ParseUint(filter.Storage, 10, 64); err != nil || id == 0 {
+			utils.WriteError(w, http.StatusBadRequest, "invalid storage filter")
+			return
+		}
 	}
 	if raw := strings.TrimSpace(r.URL.Query().Get("from")); raw != "" {
 		filter.From, err = time.Parse("2006-01-02", raw)
@@ -711,8 +597,9 @@ func (a *App) ListImages(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]map[string]any, 0, len(images))
 	baseURL := a.requestBaseURL(r)
+	names := a.storageNames(r)
 	for i := range images {
-		out = append(out, a.imageResponse(&images[i], baseURL))
+		out = append(out, a.imageResponse(&images[i], baseURL, names))
 	}
 	nextCursor := ""
 	if hasMore && len(images) > 0 {
@@ -802,8 +689,8 @@ func (a *App) createThumbnails(image *models.Image, body []byte) {
 func (a *App) insertImage(image *models.Image) error {
 	res, err := a.DB.Exec(
 		`INSERT INTO images
-		(public_name, original_name, mime_type, ext, size, width, height, storage_mode, storage_key, user_id, upload_ip, thumb_small, thumb_medium, thumb_large, is_animated, expires_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULLIF(?, 0), ?, ?, ?, ?, ?, ?)`,
+		(public_name, original_name, mime_type, ext, size, width, height, user_id, upload_ip, thumb_small, thumb_medium, thumb_large, is_animated, expires_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, NULLIF(?, 0), ?, ?, ?, ?, ?, ?)`,
 		image.PublicName,
 		image.OriginalName,
 		image.MimeType,
@@ -811,8 +698,6 @@ func (a *App) insertImage(image *models.Image) error {
 		image.Size,
 		image.Width,
 		image.Height,
-		image.StorageMode,
-		image.StorageKey,
 		image.UserID,
 		image.UploadIP,
 		image.ThumbSmall,
@@ -879,12 +764,13 @@ func (a *App) listImages(limit int, userID uint, all bool, cursor *imageCursor, 
 		query += ` AND images.created_at < ?`
 		args = append(args, filter.To)
 	}
-	if filter.Storage != "" {
-		switch filter.Storage {
-		case "mirror", "local", "s3", "webdav":
-			query += " AND (" + effectiveStorageModeSQL() + ") = ?"
-			args = append(args, filter.Storage)
-		}
+	switch filter.Storage {
+	case "":
+	case "none":
+		query += ` AND NOT EXISTS (SELECT 1 FROM image_copies c WHERE c.image_id = images.id AND c.state = 'ready')`
+	default:
+		query += ` AND EXISTS (SELECT 1 FROM image_copies c WHERE c.image_id = images.id AND c.storage_id = ? AND c.state = 'ready')`
+		args = append(args, filter.Storage)
 	}
 	query += ` ORDER BY images.created_at DESC, images.id DESC LIMIT ?`
 	args = append(args, limit+1)
@@ -927,8 +813,7 @@ func scanImage(scanner imageScanner) (*models.Image, error) {
 		&image.Size,
 		&image.Width,
 		&image.Height,
-		&image.StorageMode,
-		&image.StorageKey,
+		&image.CopyIDs,
 		&image.UserID,
 		&image.Username,
 		&image.UploadIP,
@@ -948,25 +833,48 @@ func scanImage(scanner imageScanner) (*models.Image, error) {
 
 func imageSelectSQL() string {
 	return `SELECT images.id, images.public_name, images.original_name, images.mime_type, images.ext, images.size, images.width, images.height,
-		` + effectiveStorageModeSQL() + `,
-		images.storage_key, COALESCE(images.user_id, 0), COALESCE(users.username, '游客'), images.upload_ip,
+		COALESCE((SELECT GROUP_CONCAT(c.storage_id ORDER BY c.storage_id) FROM image_copies c WHERE c.image_id = images.id AND c.state = 'ready'), ''),
+		COALESCE(images.user_id, 0), COALESCE(users.username, '游客'), images.upload_ip,
 		images.thumb_small, images.thumb_medium, images.thumb_large, images.is_animated, images.expires_at, images.created_at, images.updated_at
 		FROM images LEFT JOIN users ON users.id = images.user_id`
 }
 
-func effectiveStorageModeSQL() string {
-	return `CASE
-	 WHEN (SELECT COUNT(*) FROM image_replicas r WHERE r.image_id=images.id AND r.status='ready') +
-	      (SELECT COUNT(*) FROM storage_target_replicas r WHERE r.image_id=images.id AND r.status='ready') > 1 THEN 'mirror'
-	 WHEN EXISTS (SELECT 1 FROM image_replicas r WHERE r.image_id=images.id AND r.storage_mode='local' AND r.status='ready')
-	   OR EXISTS (SELECT 1 FROM storage_target_replicas r JOIN storage_targets t ON t.id=r.target_id WHERE r.image_id=images.id AND r.status='ready' AND t.provider='local') THEN 'local'
-	 WHEN EXISTS (SELECT 1 FROM storage_target_replicas r JOIN storage_targets t ON t.id=r.target_id WHERE r.image_id=images.id AND r.status='ready' AND t.provider='webdav') THEN 'webdav'
-	 WHEN EXISTS (SELECT 1 FROM image_replicas r WHERE r.image_id=images.id AND r.storage_mode='s3' AND r.status='ready')
-	   OR EXISTS (SELECT 1 FROM storage_target_replicas r JOIN storage_targets t ON t.id=r.target_id WHERE r.image_id=images.id AND r.status='ready' AND t.provider NOT IN ('local','webdav')) THEN 's3'
-	 ELSE images.storage_mode END`
+// storageNames maps storage IDs to display names for image listings.
+func (a *App) storageNames(r *http.Request) map[string]map[string]any {
+	out := map[string]map[string]any{}
+	rows, err := a.DB.QueryContext(r.Context(), `SELECT id, name, provider FROM storages`)
+	if err != nil {
+		return out
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id uint
+		var name, provider string
+		if rows.Scan(&id, &name, &provider) == nil {
+			out[strconv.FormatUint(uint64(id), 10)] = map[string]any{"id": id, "name": name, "provider": provider}
+		}
+	}
+	return out
 }
 
-func (a *App) imageResponse(image *models.Image, baseURL string) map[string]any {
+func copiesFor(image *models.Image, names map[string]map[string]any) ([]map[string]any, string) {
+	copies := []map[string]any{}
+	labels := []string{}
+	for _, id := range strings.Split(image.CopyIDs, ",") {
+		if item, ok := names[id]; ok {
+			copies = append(copies, item)
+			labels = append(labels, item["name"].(string))
+		}
+	}
+	label := strings.Join(labels, " + ")
+	if label == "" {
+		label = "无可用副本"
+	}
+	return copies, label
+}
+
+func (a *App) imageResponse(image *models.Image, baseURL string, names map[string]map[string]any) map[string]any {
+	copies, label := copiesFor(image, names)
 	result := map[string]any{
 		"id":            image.ID,
 		"public_name":   image.PublicName,
@@ -975,7 +883,8 @@ func (a *App) imageResponse(image *models.Image, baseURL string) map[string]any 
 		"size":          image.Size,
 		"width":         image.Width,
 		"height":        image.Height,
-		"storage_mode":  image.StorageMode,
+		"storage_mode":  label, // display label, kept for older clients
+		"storages":      copies,
 		"user_id":       image.UserID,
 		"username":      image.Username,
 		"is_animated":   image.IsAnimated,
@@ -1042,24 +951,7 @@ func selectRequestBaseURL(baseURL, siteDomains, requestHost, scheme string) stri
 }
 
 func (a *App) storageOptions() storage.Options {
-	settings := utils.GetSettings(a.DB)
-	opts := a.Store.DefaultOptions()
-	opts.UploadDir = firstNonEmpty(settings["local_upload_dir"], a.Cfg.UploadDir)
-	opts.CacheDir = firstNonEmpty(settings["s3_cache_dir"], a.Cfg.CacheDir)
-	opts.ThumbDir = firstNonEmpty(settings["thumb_dir"], "data/thumbs")
-	opts.S3Prefix = firstNonEmpty(settings["s3_key_prefix"], "images")
-	opts.S3.Endpoint = strings.TrimRight(firstNonEmpty(settings["s3_endpoint"], a.Cfg.S3.Endpoint), "/")
-	opts.S3.Region = firstNonEmpty(settings["s3_region"], a.Cfg.S3.Region)
-	opts.S3.Bucket = firstNonEmpty(settings["s3_bucket"], a.Cfg.S3.Bucket)
-	opts.S3.AccessKey = firstNonEmpty(settings["s3_access_key"], a.Cfg.S3.AccessKey)
-	opts.S3.SecretKey = firstNonEmpty(settings["s3_secret_key"], a.Cfg.S3.SecretKey)
-	if decrypted, err := utils.DecryptSecret(opts.S3.SecretKey, a.Cfg.JWTSecret); err == nil {
-		opts.S3.SecretKey = decrypted
-	} else {
-		opts.S3.SecretKey = ""
-	}
-	opts.S3.ForcePathStyle = settingBoolString(settings["s3_force_path_style"], a.Cfg.S3.ForcePathStyle)
-	return opts
+	return a.Storage.RuntimeOptions()
 }
 
 func firstNonEmpty(values ...string) string {
@@ -1111,10 +1003,6 @@ func sanitizeSetting(key, value string, cfg *config.Config) string {
 			"admin_path": "/admin",
 			"user_path":  "/dashboard",
 		}[key])
-	case "storage_mode":
-		if value != "s3" && value != "mirror" {
-			return "local"
-		}
 	case "site_domains":
 		return sanitizeDomains(value, cfg.BaseURL)
 	case "public_upload_enabled":
@@ -1177,7 +1065,7 @@ func sanitizeSetting(key, value string, cfg *config.Config) string {
 			return "4"
 		}
 		return strconv.FormatInt(parsed, 10)
-	case "db_backup_target_id":
+	case "db_backup_storage_id":
 		parsed, err := strconv.ParseUint(value, 10, 31)
 		if err != nil {
 			return "0"
@@ -1223,30 +1111,15 @@ func sanitizeSetting(key, value string, cfg *config.Config) string {
 			return "jpg,jpeg,png,gif,webp,avif,bmp,tif,tiff,ico,svg,heic,heif,jxl,psd"
 		}
 		return strings.Join(parts, ",")
-	case "local_upload_dir", "s3_cache_dir", "thumb_dir":
+	case "s3_cache_dir", "thumb_dir":
 		if value == "" {
-			if key == "local_upload_dir" {
-				return cfg.UploadDir
-			}
 			if key == "s3_cache_dir" {
 				return cfg.CacheDir
 			}
 			return "data/thumbs"
 		}
 		return filepath.Clean(value)
-	case "s3_endpoint":
-		return strings.TrimRight(value, "/")
-	case "s3_region":
-		if value == "" {
-			return "auto"
-		}
-	case "s3_force_path_style":
-		lower := strings.ToLower(value)
-		if lower == "true" || lower == "1" || lower == "yes" || lower == "on" {
-			return "true"
-		}
-		return "false"
-	case "s3_key_prefix", "db_backup_s3_prefix":
+	case "db_backup_s3_prefix":
 		return sanitizeObjectPrefix(value)
 	case "mysqldump_path":
 		if value == "" {

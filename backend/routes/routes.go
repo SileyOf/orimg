@@ -14,12 +14,8 @@ import (
 	"zhuapic/utils"
 )
 
-func Setup(db *sql.DB, cfg *config.Config, store *storage.Manager, coordinators ...*storage.Coordinator) http.Handler {
-	coordinator := storage.NewCoordinator(db, cfg, store)
-	if len(coordinators) > 0 && coordinators[0] != nil {
-		coordinator = coordinators[0]
-	}
-	app := &handlers.App{DB: db, Cfg: cfg, Store: store, Coordinator: coordinator}
+func Setup(db *sql.DB, cfg *config.Config, service *storage.Service) http.Handler {
+	app := &handlers.App{DB: db, Cfg: cfg, Storage: service}
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
@@ -89,14 +85,14 @@ func Setup(db *sql.DB, cfg *config.Config, store *storage.Manager, coordinators 
 	mux.HandleFunc("PUT /api/admin/groups/{id}", app.RequireAdmin(app.AdminGroup))
 	mux.HandleFunc("DELETE /api/admin/groups/{id}", app.RequireAdmin(app.AdminGroup))
 	mux.HandleFunc("PUT /api/admin/policies/{id}", app.RequireAdmin(app.UpdateUploadPolicy))
-	mux.HandleFunc("GET /api/admin/storage", app.RequireAdmin(app.StorageOverview))
-	mux.HandleFunc("GET /api/admin/storage/targets", app.RequireAdmin(app.StorageTargets))
-	mux.HandleFunc("POST /api/admin/storage/targets", app.RequireAdmin(app.StorageTargets))
-	mux.HandleFunc("PUT /api/admin/storage/targets/{id}", app.RequireAdmin(app.StorageTarget))
-	mux.HandleFunc("DELETE /api/admin/storage/targets/{id}", app.RequireAdmin(app.StorageTarget))
-	mux.HandleFunc("POST /api/admin/storage/targets/{id}/actions", app.RequireAdmin(app.StorageTargetAction))
-	mux.HandleFunc("POST /api/admin/storage/jobs", app.RequireAdmin(app.CreateStorageJob))
-	mux.HandleFunc("PUT /api/admin/storage/jobs/{id}", app.RequireAdmin(app.ControlStorageJob))
+	mux.HandleFunc("GET /api/admin/storages", app.RequireAdmin(app.Storages))
+	mux.HandleFunc("POST /api/admin/storages", app.RequireAdmin(app.Storages))
+	mux.HandleFunc("PUT /api/admin/storages/{id}", app.RequireAdmin(app.UpdateStorage))
+	mux.HandleFunc("POST /api/admin/storages/{id}/actions", app.RequireAdmin(app.StorageAction))
+	mux.HandleFunc("GET /api/admin/storages/{id}/removal", app.RequireAdmin(app.StorageRemoval))
+	mux.HandleFunc("POST /api/admin/storages/{id}/removal", app.RequireAdmin(app.StorageRemoval))
+	mux.HandleFunc("GET /api/admin/operations", app.RequireAdmin(app.Operations))
+	mux.HandleFunc("PUT /api/admin/operations/{id}", app.RequireAdmin(app.ControlOperation))
 	mux.HandleFunc("POST /api/admin/storage/backup", app.RequireAdmin(app.CreateDatabaseBackup))
 	mux.HandleFunc("GET /api/admin/trash", app.RequireAdmin(app.ListTrash))
 	mux.HandleFunc("POST /api/admin/trash/{id}/restore", app.RequireAdmin(app.RestoreImage))

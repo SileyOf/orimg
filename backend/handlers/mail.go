@@ -381,7 +381,7 @@ func (a *App) MailStatus(w http.ResponseWriter, r *http.Request) {
 	c, _, err := mailer.New(a.DB, a.Cfg.JWTSecret).Config(r.Context())
 	enabled := err == nil && c.Enabled && !a.Cfg.DisableBackgroundWork
 	var register bool
-	_ = a.DB.QueryRowContext(r.Context(), `SELECT s.enabled AND p.active FROM registration_settings s JOIN user_groups g ON g.id=s.group_id JOIN upload_policies p ON p.id=g.policy_id WHERE s.id=1`).Scan(&register)
+	_ = a.DB.QueryRowContext(r.Context(), `SELECT s.enabled AND g.active FROM registration_settings s JOIN user_groups g ON g.id=s.group_id WHERE s.id=1`).Scan(&register)
 	w.Header().Set("Cache-Control", "no-store")
 	utils.WriteJSON(w, 200, map[string]bool{"enabled": enabled, "registration_enabled": enabled && register})
 }
