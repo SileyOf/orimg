@@ -307,7 +307,7 @@
                   <label>正文<textarea name="body" required maxlength="4000" rows="7"></textarea></label>
                   <label>按钮文字<input name="button" maxlength="200"></label>
                   <label>页脚<textarea name="footer" maxlength="500" rows="3"></textarea></label>
-                  <p class="inline-help">变量：{{site_name}} 为发件人名称，{{message}} 为本次操作说明。安全链接和有效期由系统生成。</p>
+                  <p class="inline-help">变量：{{site_name}} 发件人名称、{{site_url}} 站点地址、{{message}} 本次操作说明、{{valid_for}} 链接有效期。空一行分段；安全链接和按钮由系统生成。</p>
                   <div class="mail-template-actions"><button id="mailPreviewButton" type="button" class="ghost-button">更新预览</button><button type="submit" class="primary-button">保存模板</button></div>
                   <p id="mailTemplateMessage" class="message" role="status"></p>
                 </form>
@@ -535,7 +535,7 @@
             </div>
             <form class="image-filter-bar admin-image-filter" id="adminImageFilterForm">
               <label class="search-field"><span>搜索</span><input id="adminImageSearch" placeholder="文件名、图片 ID、用户或邮箱" /></label>
-              <label><span>存储</span><select id="adminImageStorage"><option value="">全部</option><option value="local">Local</option><option value="s3">S3</option><option value="mirror">Mirror</option></select></label>
+              <label><span>存储</span><select id="adminImageStorage"><option value="">全部</option><option value="local">Local</option><option value="s3">S3</option><option value="webdav">WebDAV</option><option value="mirror">Mirror</option></select></label>
               <label><span>从</span><input id="adminImageFrom" type="date" /></label>
               <label><span>到</span><input id="adminImageTo" type="date" /></label>
               <button class="primary-button compact" type="submit">筛选</button>

@@ -3,7 +3,7 @@
   window.AlbumIcons.Cloud = [["path", { d: "M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" }]];
   const $ = s => document.querySelector(s);
   const escape = value => String(value ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-  const names = { local: "Local / NAS", s3: "S3 Compatible", r2: "Cloudflare R2", minio: "MinIO", b2: "Backblaze B2" };
+  const names = { local: "Local / NAS", s3: "S3 Compatible", r2: "Cloudflare R2", minio: "MinIO", b2: "Backblaze B2", webdav: "WebDAV" };
   const bytes = n => n >= 1073741824 ? (n / 1073741824).toFixed(1) + " GB" : n >= 1048576 ? (n / 1048576).toFixed(1) + " MB" : n + " B";
   let targets = [], defaultID = 0, busy = false, loading = false;
   const views = window.OrimgViews.setup("storageTargets", "storageViewTools", "orimg.storageView");
@@ -48,7 +48,7 @@
     $("#primaryTargetName").textContent = targets.find(t => t.id === defaultID)?.name || "Local + S3（原双副本策略）";
     $("#backupTargetNames").textContent = targets.filter(t => t.auto_backup && t.enabled).map(t => t.name).join("、") || "未启用";
     $("#storageTargets").innerHTML = targets.map(t => {
-      const location = t.provider === "local" ? t.config.directory : [t.config.endpoint, t.config.bucket].filter(Boolean).join(" / ");
+      const location = t.provider === "local" ? t.config.directory : t.provider === "webdav" ? [t.config.endpoint, t.config.prefix].filter(Boolean).join(" / ") : [t.config.endpoint, t.config.bucket].filter(Boolean).join(" / ");
       return '<article class="storage-target" data-catalog-row data-search="' + escape(t.name + ' ' + location + ' ' + names[t.provider]) + '" data-filter="' + (t.enabled ? 'enabled' : 'paused') + (t.failed ? ' failed' : '') + '" data-target="' + t.id + '">' +
         '<div class="target-heading"><span class="target-symbol">' + icon(t.provider === "local" ? "HardDrive" : "Cloud") + '</span><div><h3>' + escape(t.name) + '</h3><small>' + names[t.provider] + '</small></div>' +
         '<button type="button" class="icon-button" data-edit="' + t.id + '" title="编辑存储" aria-label="编辑 ' + escape(t.name) + '">' + icon("Settings") + '</button></div>' +
@@ -125,12 +125,13 @@
   dialog.innerHTML = '<form id="targetEditorForm"><header><h2 id="targetEditorTitle">新增存储</h2><button type="button" class="icon-button" data-close aria-label="关闭">' + icon("X") + '</button></header>' +
     '<input type="hidden" name="id"><label>名称<input name="name" maxlength="80" required></label>' +
     '<label>存储服务<select name="provider">' + Object.entries(names).map(([key, label]) => '<option value="' + key + '">' + label + '</option>').join("") + '</select></label>' +
-    '<div id="targetLocalFields"><label>目录<input name="directory" placeholder="/www/wwwroot/orimg-data"></label></div>' +
-    '<div id="targetS3Fields"><label>Endpoint<input name="endpoint" type="url" placeholder="https://s3.example.com"></label>' +
-    '<div class="target-form-pair"><label>Region<input name="region" placeholder="auto"></label><label>Bucket<input name="bucket"></label></div>' +
-    '<label>对象前缀<input name="prefix" placeholder="images"></label>' +
-    '<label>Access Key<input name="access_key" autocomplete="off"></label><label>Secret Key<input name="secret_key" type="password" autocomplete="new-password" placeholder="留空保留原密钥"></label>' +
-    '<label class="target-check"><input name="path_style" type="checkbox" checked>Path-style</label></div>' +
+    '<div id="targetLocalFields"><label>目录<input name="directory" placeholder="/srv/origin/images"></label></div>' +
+    '<div id="targetS3Fields"><label><span data-s3-label="Endpoint" data-dav-label="WebDAV 地址">Endpoint</span><input name="endpoint" type="url" placeholder="https://s3.example.com"></label>' +
+    '<div class="target-form-pair" data-s3-only><label>Region<input name="region" placeholder="auto"></label><label>Bucket<input name="bucket"></label></div>' +
+    '<label><span data-s3-label="对象前缀" data-dav-label="子目录（可选）">对象前缀</span><input name="prefix" placeholder="images"></label>' +
+    '<label><span data-s3-label="Access Key" data-dav-label="用户名">Access Key</span><input name="access_key" autocomplete="off"></label><label><span data-s3-label="Secret Key" data-dav-label="密码 / 应用专用密码">Secret Key</span><input name="secret_key" type="password" autocomplete="new-password" placeholder="留空保留原密钥"></label>' +
+    '<p class="inline-help" data-dav-only>填写 WebDAV 目录地址，例如 Nextcloud 的 https://cloud.example.com/remote.php/dav/files/用户名/origin。目录会自动创建，建议使用 HTTPS。</p>' +
+    '<label class="target-check" data-s3-only><input name="path_style" type="checkbox" checked>Path-style</label></div>' +
     '<label class="target-check"><input name="enabled" type="checkbox" checked>启用存储</label>' +
     '<label>上传可选范围<select name="upload_access"><option value="admin">仅管理员</option><option value="members">登录用户</option><option value="public">游客与登录用户</option></select></label>' +
     '<p id="targetEditorMessage" role="status"></p>' +
@@ -138,7 +139,14 @@
     '<footer><button type="button" class="ghost-button" data-close>取消</button><button type="submit" class="primary-button">保存存储</button></footer></form>';
   document.body.append(dialog);
   const form = $("#targetEditorForm");
-  function fields() { $("#targetLocalFields").hidden = form.elements.provider.value !== "local"; $("#targetS3Fields").hidden = form.elements.provider.value === "local"; }
+  function fields() {
+    const provider = form.elements.provider.value, dav = provider === "webdav";
+    $("#targetLocalFields").hidden = provider !== "local"; $("#targetS3Fields").hidden = provider === "local";
+    dialog.querySelectorAll("[data-s3-only]").forEach(el => { el.hidden = dav; });
+    dialog.querySelectorAll("[data-dav-only]").forEach(el => { el.hidden = !dav; });
+    dialog.querySelectorAll("[data-s3-label]").forEach(el => { el.textContent = dav ? el.dataset.davLabel : el.dataset.s3Label; });
+    form.elements.region.required = false;
+  }
   function edit(t) {
     form.reset(); form.elements.id.value = t?.id || ""; form.elements.name.value = t?.name || ""; form.elements.provider.value = t?.provider || "local";
     form.elements.enabled.checked = t ? t.enabled : true;
@@ -158,7 +166,8 @@
   form.elements.provider.addEventListener("change", () => {
     fields(); const provider = form.elements.provider.value;
     form.elements.region.value = provider === "r2" ? "auto" : provider === "s3" || provider === "minio" ? "us-east-1" : "";
-    form.elements.endpoint.placeholder = provider === "r2" ? "https://ACCOUNT_ID.r2.cloudflarestorage.com" : provider === "b2" ? "https://s3.us-west-004.backblazeb2.com" : "https://s3.example.com";
+    form.elements.endpoint.placeholder = provider === "r2" ? "https://ACCOUNT_ID.r2.cloudflarestorage.com" : provider === "b2" ? "https://s3.us-west-004.backblazeb2.com" : provider === "webdav" ? "https://dav.example.com/origin" : "https://s3.example.com";
+    form.elements.prefix.placeholder = provider === "webdav" ? "可留空" : "images";
   });
   form.addEventListener("submit", async event => {
     event.preventDefault(); const id = Number(form.elements.id.value); const t = targets.find(t => t.id === id);

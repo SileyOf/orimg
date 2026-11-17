@@ -53,7 +53,14 @@ func (c *Coordinator) UploadTargets(ctx context.Context) ([]Target, error) {
 			continue
 		}
 		t.Enabled = true
-		t.Configured = t.Mode() == "local" || (config.Endpoint != "" && config.Bucket != "" && config.AccessKey != "" && config.SecretKey != "")
+		switch t.Mode() {
+		case "local":
+			t.Configured = true
+		case "webdav":
+			t.Configured = config.Endpoint != ""
+		default:
+			t.Configured = config.Endpoint != "" && config.Bucket != "" && config.AccessKey != "" && config.SecretKey != ""
+		}
 		result = append(result, t)
 	}
 	err = rows.Err()

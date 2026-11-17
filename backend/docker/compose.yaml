@@ -3,7 +3,7 @@
 name: origin
 services:
   origin:
-    image: ${ORIGIN_IMAGE:-yuki955/orimg:0.5.2}
+    image: ${ORIGIN_IMAGE:-yuki955/orimg:0.6.0}
     pull_policy: missing
     restart: unless-stopped
     user: "10001:10001"
@@ -18,6 +18,9 @@ services:
       TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
     volumes:
       - origin-data:/app/data
+    extra_hosts:
+      # Lets the app reach a MySQL server on the Docker host by this name.
+      - host.docker.internal:host-gateway
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=512m,mode=1777
     stop_grace_period: 40s

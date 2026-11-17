@@ -7,12 +7,12 @@ const { execFileSync, spawnSync } = require('node:child_process');
 (async () => {
   const root = path.resolve(__dirname, '..');
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'origin-docker-qa-'));
-  const id = `origin-052-qa-${process.pid}`;
+  const id = `origin-060-qa-${process.pid}`;
   const resources = { containers: [], volumes: [], network: false };
   const docker = (...args) => execFileSync('docker', args, { encoding: 'utf8', maxBuffer: 16 << 20, timeout: 180000 });
   const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
   const password = 'isolated-docker-fixture-password';
-  const image = process.env.ORIGIN_QA_IMAGE || 'yuki955/orimg:0.5.2';
+  const image = process.env.ORIGIN_QA_IMAGE || 'yuki955/orimg:0.6.0';
   const go = process.env.GO_BIN || 'go';
   const sql = query => docker('exec', '-e', `MYSQL_PWD=${password}`, `${id}-db`, 'mysql', '-uroot', '-Nse', query);
   async function wait(check) {
@@ -51,7 +51,7 @@ const { execFileSync, spawnSync } = require('node:child_process');
       };
       launch();
       await wait(() => docker('exec', name, '/app/zhuapic', '-healthcheck'));
-      assert.equal(docker('exec', name, '/app/zhuapic', '-version').trim(), 'v0.5.2');
+      assert.equal(docker('exec', name, '/app/zhuapic', '-version').trim(), 'v0.6.0');
       assert.equal(JSON.parse(docker('inspect', name))[0].Config.User, '10001:10001');
       const logResult = spawnSync('docker', ['logs', name], { encoding: 'utf8' });
       assert.equal(logResult.status, 0);
@@ -135,6 +135,28 @@ const { execFileSync, spawnSync } = require('node:child_process');
         'mysql:8.4', '-c', 'find /d -name "*.png" -path "*legacy-uploads*"');
       assert.ok(listing.trim(), 'UPLOAD_DIR from the mounted .env was not used');
       console.log('legacy: mounted .env ($ in password, custom UPLOAD_DIR, PORT override), bootstrap, login and upload passed');
+
+      // WebDAV storage against a real server (rclone serve webdav).
+      const dav = `${id}-dav`, davPass = 'dav$pa ss-42';
+      docker('run', '-d', '--name', dav, '--network', id, '--network-alias', 'dav', process.env.ORIGIN_QA_WEBDAV_IMAGE || 'rclone/rclone:1.68.2',
+        'serve', 'webdav', '/data', '--addr', ':8080', '--user', 'davuser', '--pass', davPass);
+      resources.containers.push(dav);
+      await wait(() => docker('exec', dav, 'sh', '-c', 'wget -q -O /dev/null --spider http://127.0.0.1:8080/ 2>&1 | grep -q 401 || nc -z 127.0.0.1 8080'));
+      const created = api('POST', '/api/admin/storage/targets', { name: 'NAS WebDAV', provider: 'webdav', enabled: true, upload_access: 'members',
+        config: { endpoint: 'http://dav:8080/', prefix: 'origin', access_key: 'davuser', secret_key: davPass } }, login.token, 201);
+      const targetPath = `/api/admin/storage/targets/${created.id}/actions`;
+      api('POST', targetPath, { action: 'probe' }, login.token);
+      api('POST', targetPath, { action: 'default' }, login.token);
+      const listed = api('GET', '/api/admin/storage/targets', null, login.token);
+      const davTarget = listed.targets.find(t => t.id === created.id);
+      assert.ok(davTarget && davTarget.configured && !davTarget.config.secret_key && davTarget.has_secret, 'webdav target listed without secret');
+      const onDav = api('POST', '/api/upload', null, login.token, 200, true);
+      const stored = docker('exec', dav, 'sh', '-c', 'find /data/origin -type f -name "*.png"');
+      assert.ok(stored.trim(), 'upload did not reach the WebDAV server');
+      api('GET', new URL(onDav.url).pathname);
+      const filtered = api('GET', '/api/admin/images?storage=webdav', null, login.token);
+      assert.ok(filtered.images.some(i => i.public_name === onDav.image.public_name && i.storage_mode === 'webdav'), 'webdav storage filter');
+      console.log('webdav: create, probe, default target, upload to rclone, serve via cache and storage filter passed');
     }
   } finally {
     for (const name of resources.containers.reverse()) { try { docker('rm', '-f', name); } catch {} }

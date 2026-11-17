@@ -260,7 +260,7 @@ func (a *App) RequestAccountMail(w http.ResponseWriter, r *http.Request) {
 	if purpose == "reset" {
 		validFor = "20 分钟"
 	}
-	_, err = s.QueueTx(r.Context(), tx, c, purpose, mailer.Message{To: to, Body: "我们收到了您的账号验证请求。请点击下方按钮，安全地完成操作。", ActionURL: link, ValidFor: validFor}, hash, expires)
+	_, err = s.QueueTx(r.Context(), tx, c, purpose, mailer.Message{To: to, Body: mailer.PurposeMessage(purpose), ActionURL: link, ValidFor: validFor}, hash, expires)
 	if err != nil {
 		utils.WriteError(w, 503, "邮件暂时无法入队，请稍后再试")
 		return

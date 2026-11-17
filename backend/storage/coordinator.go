@@ -428,7 +428,7 @@ func (c *Coordinator) databaseBackupDestination(ctx context.Context, target stri
 		}
 		opts, mode = c.TargetOptions(t), t.Mode()
 	}
-	if mode == "s3" && !c.manager.S3Configured(opts) {
+	if !c.manager.Configured(mode, opts) {
 		return opts, mode, errors.New("备份存储未配置完整")
 	}
 	return opts, mode, nil

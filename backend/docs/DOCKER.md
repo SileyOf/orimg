@@ -1,14 +1,24 @@
-# Origin v0.5.2 Docker 部署
+# Origin Docker 部署
 
-镜像发布在 Docker Hub：`yuki955/orimg`，提供 Linux x86_64 (`amd64`) 和 ARM64，同一标签自动匹配架构。每个版本同时有版本号标签（如 `0.5.2`）和 `latest`；生产环境请固定版本号。镜像包含 Go 程序、前端、CA 证书、时区数据及 Oracle MySQL 8.4 的 `mysqldump` 和所需运行库，不需要在 VPS 安装 Go 或 MySQL 客户端。
+镜像发布在 Docker Hub：`yuki955/orimg`，提供 Linux x86_64 (`amd64`) 和 ARM64，同一标签自动匹配架构。每个版本同时有版本号标签（如 `0.6.0`）和 `latest`；生产环境请固定版本号。镜像包含 Go 程序、前端、CA 证书、时区数据及 Oracle MySQL 8.4 的 `mysqldump` 和所需运行库，不需要在 VPS 安装 Go 或 MySQL 客户端。
 
 数据库是独立服务，不和应用放在同一个容器。可以继续使用已有 MySQL，也可以选择附带的 Compose 数据库方案。
 
-**从 v0.4.x 二进制站点迁入请直接看 [迁移指南](MIGRATE_FROM_BINARY.md)**，不要按下面的全新安装流程操作。
+**已有二进制站点请直接看 [迁移指南](MIGRATION.md)**，不要按下面的全新安装流程操作。不用 Docker 的话见 [二进制部署](BINARY.md)。
 
 ## 1. 安装
 
 从仓库 `backend/docker/` 取 `compose.yaml`（可选 `compose.mysql.yaml`）和 `.env.example` 放到服务器同一目录：
+
+```sh
+mkdir origin && cd origin
+base=https://raw.githubusercontent.com/SileyOf/orimg/main/backend/docker
+curl -fsSLO $base/compose.yaml
+curl -fsSLO $base/compose.mysql.yaml          # 可选：同时部署 MySQL 容器
+curl -fsSL -o .env.example $base/.env.example
+```
+
+然后：
 
 ```sh
 cp .env.example .env          # Compose 参数，不是应用配置
@@ -46,7 +56,7 @@ location / {
 
 仅运行 `compose.yaml`，在安装页填写数据库主机、库名及账号。远程数据库建议 TLS 并验证证书。旧库接入需要原管理员密码及原 `JWT_SECRET`，不会创建第二个管理员或重设账号。先备份、停止旧站点及其后台任务，确认图片目录已挂载，再进行接入。
 
-容器里的 `127.0.0.1` 指向应用容器自身，不是 VPS 的 MySQL。宿主机数据库可按示例添加 `host.docker.internal:host-gateway` 并使用该主机名；MySQL 必须监听可达接口，且防火墙和账号仅允许所需来源，不要把 3306 开放给全网。
+容器里的 `127.0.0.1` 指向应用容器自身，不是 VPS 的 MySQL。宿主机上的数据库在安装页填写主机名 `host.docker.internal`（`compose.yaml` 已配置）；MySQL 必须监听可达接口，且防火墙和账号仅允许所需来源，不要把 3306 开放给全网。
 
 ### 新建独立 MySQL
 
@@ -62,7 +72,7 @@ docker compose -f compose.yaml -f compose.mysql.yaml up -d
 
 ## 4. 从 v0.4.x 二进制部署切换
 
-见 [迁移指南](MIGRATE_FROM_BINARY.md)：使用独立的 `compose.legacy.yaml`（主机网络、旧 `.env` 原样只读挂载、后台任务先暂停），并用只读的 `migrate-check.sh` 预检查路径、端口与数据库设置。
+见 [迁移指南](MIGRATION.md)：使用独立的 `compose.legacy.yaml`（主机网络、旧 `.env` 原样只读挂载、后台任务先暂停），并用只读的 `migrate-check.sh` 预检查路径、端口与数据库设置。
 
 ## 5. 持久化、更新与回退
 
@@ -70,7 +80,7 @@ docker compose -f compose.yaml -f compose.mysql.yaml up -d
 - MySQL 方案另有 `origin_mysql-data`。切勿使用 `docker compose down -v` 做普通更新，该命令会删除数据卷。
 - 应用根文件系统只读，`/tmp` 是有容量上限的临时空间，移除容器会丢失，不能存放长期图片。自定义存储路径必须额外挂载。
 - 更新：备份数据，把 `.env` 中的 `ORIGIN_IMAGE` 改成新版本号，执行 `docker compose pull && docker compose up -d`。数据不在镜像里，不能只备份镜像。
-- v0.5.x 与 v0.4.7 / v0.4.8 数据库结构相同，可停服后回退原二进制，继续使用原配置与数据。不要同时运行两套工作器。对后续有数据库迁移的版本，不能假设换镜像即可回退。
+- v0.4.7 起数据库结构版本一直为 9，可停服后改用二进制运行（见 [迁移指南](MIGRATION.md)），继续使用原配置与数据。不要同时运行两套工作器。对后续有数据库迁移的版本，不能假设换镜像即可回退。
 - Docker 健康检查是存活检查，安装前也可 healthy。`/api/ready` 才表示已安装且数据库可连接；未安装或数据库故障时返回 503。启动失败应先看日志，不要删数据卷重试。
 
 ## 6. 源码构建与测试
@@ -78,7 +88,7 @@ docker compose -f compose.yaml -f compose.mysql.yaml up -d
 在 `backend/` 目录执行：
 
 ```sh
-docker buildx build --platform linux/amd64,linux/arm64 --tag yuki955/orimg:0.5.2 --provenance=false --load .
+docker buildx build --platform linux/amd64,linux/arm64 --tag yuki955/orimg:0.6.0 --provenance=false --load .
 GO_BIN=/path/to/go node docker/smoke.cjs
 node release/docker-package.cjs
 ```

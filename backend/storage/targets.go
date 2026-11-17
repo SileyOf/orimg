@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"zhuapic/config"
 	"zhuapic/models"
 	"zhuapic/utils"
 )
@@ -45,8 +46,11 @@ type Target struct {
 }
 
 func (t Target) Mode() string {
-	if t.Provider == "local" {
+	switch t.Provider {
+	case "local":
 		return "local"
+	case "webdav":
+		return "webdav"
 	}
 	return "s3"
 }
@@ -57,7 +61,7 @@ func ValidateTarget(t *Target) error {
 		return errors.New("存储名称需要 1–80 个字符")
 	}
 	switch t.Provider {
-	case "local", "s3", "r2", "minio", "b2":
+	case "local", "s3", "r2", "minio", "b2", "webdav":
 	default:
 		return errors.New("不支持的存储服务")
 	}
@@ -69,6 +73,21 @@ func ValidateTarget(t *Target) error {
 			return errors.New("请选择专用的本地绝对路径，不能使用根目录")
 		}
 		t.Config.Directory = filepath.Clean(t.Config.Directory)
+		return nil
+	}
+	if t.Mode() == "webdav" {
+		u, err := url.Parse(strings.TrimSpace(t.Config.Endpoint))
+		if err != nil || u.Hostname() == "" || (u.Scheme != "https" && u.Scheme != "http") || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+			return errors.New("WebDAV 地址必须是有效的 HTTP(S) 目录地址，不得包含凭据、查询或片段")
+		}
+		t.Config.Endpoint = strings.TrimRight(u.String(), "/")
+		if strings.Contains(t.Config.Prefix, "..") || strings.HasPrefix(t.Config.Prefix, "/") {
+			return errors.New("子目录必须是相对路径，不能含 ..")
+		}
+		if strings.TrimSpace(t.Config.Prefix) != "" {
+			t.Config.Prefix = cleanObjectPrefix(t.Config.Prefix)
+		}
+		t.Config.Region, t.Config.Bucket, t.Config.PathStyle, t.Config.Directory = "", "", false, ""
 		return nil
 	}
 	u, err := url.Parse(strings.TrimSpace(t.Config.Endpoint))
@@ -110,7 +129,7 @@ func (c *Coordinator) Target(ctx context.Context, id uint) (*Target, error) {
 		}
 	}
 	t.HasSecret = t.Config.SecretKey != ""
-	t.Configured = t.Mode() == "local" || c.manager.S3Configured(c.TargetOptions(&t))
+	t.Configured = c.manager.Configured(t.Mode(), c.TargetOptions(&t))
 	t.LocationLocked = true
 	if t.LegacyMode != "" {
 		var count int
@@ -123,7 +142,12 @@ func (c *Coordinator) Target(ctx context.Context, id uint) (*Target, error) {
 }
 
 func (c *Coordinator) TargetOptions(t *Target) Options {
-	opts := c.options()
+	return c.targetOptionsFrom(c.options(), t)
+}
+
+// targetOptionsFrom overlays a target's location and credentials on the site
+// defaults (cache and thumbnail directories).
+func (c *Coordinator) targetOptionsFrom(opts Options, t *Target) Options {
 	opts.UploadDir = t.Config.Directory
 	opts.S3.Endpoint = t.Config.Endpoint
 	opts.S3.Region = t.Config.Region
@@ -132,6 +156,10 @@ func (c *Coordinator) TargetOptions(t *Target) Options {
 	opts.S3.SecretKey = t.Config.SecretKey
 	opts.S3.ForcePathStyle = t.Config.PathStyle
 	opts.S3Prefix = t.Config.Prefix
+	if t.Mode() == "webdav" {
+		opts.S3 = config.S3Config{}
+		opts.WebDAV = WebDAVConfig{URL: t.Config.Endpoint, Username: t.Config.AccessKey, Password: t.Config.SecretKey}
+	}
 	return opts
 }
 
@@ -244,8 +272,8 @@ func (c *Coordinator) SaveTarget(ctx context.Context, t *Target) error {
 	if err := ValidateTarget(t); err != nil {
 		return err
 	}
-	if t.AutoBackup && t.Mode() == "s3" && !c.manager.S3Configured(c.TargetOptions(t)) {
-		return errors.New("自动备份需要完整的 S3 配置")
+	if t.AutoBackup && !c.manager.Configured(t.Mode(), c.TargetOptions(t)) {
+		return errors.New("自动备份需要完整的存储配置")
 	}
 	if !t.Enabled && (t.AutoBackup || c.DefaultTargetID() == t.ID && t.ID != 0) {
 		return errors.New("请先取消默认存储和自动备份，再暂停此存储")
@@ -353,8 +381,8 @@ func (c *Coordinator) SetDefaultTarget(ctx context.Context, id uint) error {
 		if !t.Enabled {
 			return errors.New("目标存储已暂停")
 		}
-		if t.Mode() == "s3" && !c.manager.S3Configured(c.TargetOptions(t)) {
-			return errors.New("请先完善 S3 配置")
+		if !c.manager.Configured(t.Mode(), c.TargetOptions(t)) {
+			return errors.New("请先完善存储配置")
 		}
 	}
 	_, err := c.db.ExecContext(ctx, "INSERT INTO site_settings (`key`,value) VALUES ('default_storage_target_id',?) ON DUPLICATE KEY UPDATE value=VALUES(value)", strconv.FormatUint(uint64(id), 10))
@@ -396,8 +424,8 @@ func (c *Coordinator) QueueTarget(ctx context.Context, id uint, action string) (
 	if !t.Enabled {
 		return 0, errors.New("目标存储已暂停")
 	}
-	if t.Mode() == "s3" && !c.manager.S3Configured(c.TargetOptions(t)) {
-		return 0, errors.New("目标 S3 配置不完整")
+	if !c.manager.Configured(t.Mode(), c.TargetOptions(t)) {
+		return 0, errors.New("目标存储配置不完整")
 	}
 	var res sql.Result
 	switch action {
@@ -441,7 +469,7 @@ func (c *Coordinator) TargetFailures(ctx context.Context) ([]map[string]any, err
 func targetObjectKey(t *Target, image *models.Image) string {
 	// Separate namespace prevents a backup from overwriting a legacy primary object.
 	prefix := "orimg-replicas/" + strconv.FormatUint(uint64(t.ID), 10)
-	if t.Mode() == "s3" && t.Config.Prefix != "" {
+	if t.Mode() != "local" && t.Config.Prefix != "" {
 		prefix = t.Config.Prefix + "/" + prefix
 	}
 	return fmt.Sprintf("%s/%s", prefix, filepath.Base(image.PublicName))

@@ -15,8 +15,11 @@ import (
 )
 
 func (c *Coordinator) openReplica(ctx context.Context, opts Options, mode, key string) (io.ReadCloser, error) {
-	if mode == "local" {
+	switch mode {
+	case "local":
 		return os.Open(c.manager.LocalPath(opts, key))
+	case "webdav":
+		return NewWebDAVClient(opts.WebDAV).Open(ctx, key)
 	}
 	return NewS3Client(opts.S3).OpenObject(ctx, key)
 }
@@ -214,6 +217,8 @@ func (c *Coordinator) copyTargetReplica(ctx context.Context, image *models.Image
 				return "", err
 			}
 			err = writeAtomicReader(c.manager.LocalPath(opts, key), staged)
+		} else if t.Mode() == "webdav" {
+			err = NewWebDAVClient(opts.WebDAV).PutReader(ctx, key, image.MimeType, image.Size, staged)
 		} else {
 			err = NewS3Client(opts.S3).PutObjectReader(ctx, key, image.MimeType, image.Size, staged, hash)
 		}

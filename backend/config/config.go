@@ -18,7 +18,7 @@ type S3Config struct {
 	ForcePathStyle bool
 }
 
-const AppVersion = "v0.5.2"
+const AppVersion = "v0.6.0"
 
 type Config struct {
 	DBTLS                 string

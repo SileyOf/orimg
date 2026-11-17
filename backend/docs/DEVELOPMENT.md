@@ -1,4 +1,4 @@
-# 开发与源码说明
+# 开发与编译
 
 ## 源码结构
 
@@ -19,7 +19,8 @@ backend/
   internal/testsupport/          集成测试的本机数据库保护
   static/                        无构建步骤的 HTML/CSS/JavaScript
   tests/                         Playwright 模拟 API 回归
-  docker/                        Compose、运行库收集与容器回归
+  docker/                        Compose、迁移检查脚本、运行库收集与容器回归
+  deploy/                        systemd 服务示例
   release/                       二进制、镜像、源码打包脚本
   docs/                          当前指南、设计与历史发布记录
 ```
@@ -28,7 +29,7 @@ backend/
 
 ## 依赖与本地开发
 
-- Go 依赖由 `go.mod` / `go.sum` 固定；module 的最低声明为 Go 1.23.0。v0.5.x 镜像构建固定使用 Go 1.27.1，具体摘要见 Dockerfile。部署前应另行审核工具链和依赖的更新情况。
+- Go 依赖由 `go.mod` / `go.sum` 固定；module 的最低声明为 Go 1.23.0。发布构建（镜像和二进制包）固定使用 Go 1.27.1，具体摘要见 Dockerfile。部署前应另行审核工具链和依赖的更新情况。
 - 普通运行需要 MySQL；首次启动通过安装向导初始化，无默认管理员密码。
 - 前端无需 npm 构建。Node.js 用于 `.cjs` 测试与打包；浏览器测试另需 Playwright 和对应浏览器。目前还没有锁定的 Node 依赖清单，不应声称完全可复现的浏览器工具链。
 - MySQL 备份需要兼容的 `mysqldump`；Docker 镜像已包含，本地运行则需自行安装。
@@ -40,6 +41,32 @@ go run .
 ```
 
 请在干净的开发目录执行，不要复制生产 `.env` 或生产数据。首次安装见 [安装指南](INSTALLATION.md)。
+
+## 编译
+
+### 编译二进制
+
+需要 Go 1.23 或更新版本（推荐与发布一致的 1.27），不需要 CGO：
+
+```sh
+git clone https://github.com/SileyOf/orimg.git
+cd orimg/backend
+CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o zhuapic .
+# 交叉编译：GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o zhuapic .
+./zhuapic -version
+```
+
+运行时程序从工作目录读取 `static/`、`.env` 并写入 `data/`。可以直接在 `backend/` 目录运行，也可以把 `zhuapic` 和 `static/` 一起复制到部署目录，之后的步骤与 [二进制部署](BINARY.md) 相同。
+
+### 构建 Docker 镜像
+
+```sh
+cd orimg/backend
+docker build -t origin:dev .                  # 当前架构
+docker buildx build --platform linux/amd64,linux/arm64 -t origin:dev --load .   # 双架构
+```
+
+然后把 Compose `.env` 中的 `ORIGIN_IMAGE` 改为 `origin:dev`。Dockerfile 中的基础镜像固定了摘要，可以用 `--build-arg GO_IMAGE=...`、`--build-arg MYSQL_IMAGE=...` 换成自己审核过的来源。
 
 ## 普通测试
 
@@ -82,4 +109,7 @@ node release/source-package.cjs
 
 脚本根据代码版本和打包日期生成源码 ZIP、包级 SHA-256 文件，以及包内 `SOURCE_MANIFEST.json` / `SHA256SUMS`。只收集维护中的源码与文档目录，不包含 `.env`、安装/签名密钥、图片数据、数据库导出、缓存、历史 dist 或测试截图。运行前仍应人工审核新增文档和测试夹具，有限规则扫描不等于完整秘密审计。
 
-二进制打包入口为 `release/package.cjs`，Docker 打包入口为 `release/docker-package.cjs`。两者均与源码包分开，源码 ZIP 不冒充可直接部署的升级包。
+发布包：先用 `docker buildx build --platform linux/amd64,linux/arm64 --tag yuki955/orimg:X.Y.Z --provenance=false --load .` 构建镜像，再运行：
+
+- `node release/package.cjs`：二进制发布包 `origin-vX.Y.Z-linux-{amd64,arm64}.tar.gz`。程序直接取自上述镜像，保证两种发行方式是同一份构建。
+- `node release/docker-package.cjs`：离线镜像包，供无法访问 Docker Hub 的服务器 `docker load`。

@@ -119,7 +119,7 @@ else
       case "$key" in
         mysqldump_path)
           [[ "$value" == /usr/bin/mysqldump || "$value" == mysqldump ]] && ok "mysqldump_path=$value" ||
-            info "mysqldump_path=$value does not exist in the image; v0.5.2+ falls back to /usr/bin/mysqldump" ;;
+            info "mysqldump_path=$value does not exist in the image; v0.5.2+ falls back to /usr/bin/mysqldump inside Docker" ;;
         *)
           if [[ "$value" == /* && "$value" != "$OLD/data"* ]]; then todo "setting $key=$value: mount this path at the same location"
           elif [[ "$value" == "$OLD/data"* ]]; then todo "setting $key=$value: absolute path inside the old site; also mount ./data at $OLD/data or change it to a data/... path"

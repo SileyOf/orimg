@@ -2,6 +2,26 @@
 
 版本使用三段式编号。以下依据随项目保留的发布说明整理；早期 beta 按阶段归纳，不补写无法核实的发布日期。历史验证记录不代表本次重新完成全部验收。
 
+## v0.6.0 — 2026-11-17
+
+数据库结构保持 9，无新增迁移，可与 v0.4.7 起的所有版本互相切换。详见 [升级说明](backend/docs/UPGRADE_v0.6.0.md)。
+
+### 新增
+
+- **WebDAV 存储**：Nextcloud / ownCloud、群晖、Alist、rclone 等均可作为命名存储位置，用于上传、自动备份、多地副本和数据库备份。自动创建目录，不跟随重定向，凭据加密保存。
+- **二进制发布包**：Releases 提供 `origin-vX.Y.Z-linux-{amd64,arm64}.tar.gz`，程序与 Docker 镜像为同一构建，附 systemd 服务示例 `origin.service`。
+
+### 改进
+
+- 邮件模板：验证邮箱 / 重设密码 / 更换邮箱分别使用对应说明；按钮和顶部色条跟随站点强调色；加入收件箱预览摘要、浅色方案声明和 `<title>`；换行改用 `<br>`，兼容 Outlook；新增 `{{site_url}}`、`{{valid_for}}` 变量；页脚链接站点，纯文本版本附署名。
+- 文档重写：README、[安装指南](backend/docs/INSTALLATION.md)（三种部署方式对比）、新增 [二进制部署](backend/docs/BINARY.md)、[迁移指南](backend/docs/MIGRATION.md)（二进制 ⇄ Docker、换服务器）、[存储说明](backend/docs/STORAGE.md)、源码编译说明。
+- `compose.yaml` 预置 `host.docker.internal`，方便连接宿主机上的 MySQL；`compose.legacy.yaml` 支持安装向导方式的站点（空 `legacy.env`）。
+
+### 测试
+
+- WebDAV 客户端单元测试（目录创建、认证、删除幂等、拒绝重定向）与使用真实 rclone WebDAV 服务的容器端到端测试。
+- 邮件渲染测试覆盖强调色、预览摘要、变量、换行与不安全站点地址。
+
 ## v0.5.2 — 2026-11-16
 
 开源与 Docker Hub 发布版。数据库结构保持 9，无新增迁移。详见 [升级说明](backend/docs/UPGRADE_v0.5.2.md)。

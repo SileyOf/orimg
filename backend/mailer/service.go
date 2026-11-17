@@ -147,7 +147,7 @@ func (s *Service) Test(ctx context.Context, to string) (uint, error) {
 		return 0, err
 	}
 	defer tx.Rollback()
-	id, err := s.QueueTx(ctx, tx, c, "test", Message{To: to, Subject: c.Name + " · 测试邮件", Body: "这是一封由管理员主动发送的 Origin 测试邮件。\n收到此邮件后可以开启正式发信。"}, "", time.Now().Add(time.Hour))
+	id, err := s.QueueTx(ctx, tx, c, "test", Message{To: to, Subject: c.Name + " · 测试邮件", Body: PurposeMessage("test")}, "", time.Now().Add(time.Hour))
 	if err != nil {
 		return 0, err
 	}

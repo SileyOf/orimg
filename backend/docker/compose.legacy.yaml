@@ -4,6 +4,8 @@
 # - legacy.env is the old site's .env copied unchanged. It is mounted as
 #   /app/.env and parsed by the application exactly like the binary did
 #   (Compose env_file would expand "$" inside passwords and keys).
+#   Sites installed with the setup wizard have no .env: create an empty
+#   legacy.env (touch legacy.env); data/installation.json holds the settings.
 # - Host networking keeps 127.0.0.1 meaning the server itself, so the existing
 #   MySQL account, DB_HOST and TRUSTED_PROXIES keep working unchanged.
 # - ./data is a copy of the old data/ directory, owned by 10001:10001.
@@ -12,7 +14,7 @@
 name: origin
 services:
   origin:
-    image: ${ORIGIN_IMAGE:-yuki955/orimg:0.5.2}
+    image: ${ORIGIN_IMAGE:-yuki955/orimg:0.6.0}
     pull_policy: missing
     restart: unless-stopped
     network_mode: host

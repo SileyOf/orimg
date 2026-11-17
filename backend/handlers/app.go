@@ -220,7 +220,7 @@ func (a *App) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 			utils.WriteError(w, 400, "备份存储不存在或已停用")
 			return
 		}
-		if target.Mode() == "s3" && !a.Store.S3Configured(a.Coordinator.TargetOptions(target)) {
+		if !a.Store.Configured(target.Mode(), a.Coordinator.TargetOptions(target)) {
 			utils.WriteError(w, 400, "备份存储配置不完整")
 			return
 		}
@@ -438,6 +438,10 @@ func (a *App) createImageFromUpload(w http.ResponseWriter, r *http.Request, head
 	}
 	if (mode == "s3" || mode == "mirror") && !a.Store.S3Configured(opts) {
 		utils.WriteError(w, http.StatusBadRequest, "s3 is not configured")
+		return
+	}
+	if mode == "webdav" && !a.Store.Configured(mode, opts) {
+		utils.WriteError(w, http.StatusBadRequest, "webdav is not configured")
 		return
 	}
 	if (mode == "local" || mode == "mirror") && a.Coordinator != nil {
@@ -681,7 +685,7 @@ func (a *App) ListImages(w http.ResponseWriter, r *http.Request) {
 		utils.WriteError(w, http.StatusBadRequest, "image search is too long")
 		return
 	}
-	if filter.Storage != "" && filter.Storage != "local" && filter.Storage != "s3" && filter.Storage != "mirror" {
+	if filter.Storage != "" && filter.Storage != "local" && filter.Storage != "s3" && filter.Storage != "mirror" && filter.Storage != "webdav" {
 		utils.WriteError(w, http.StatusBadRequest, "invalid storage filter")
 		return
 	}
@@ -877,7 +881,7 @@ func (a *App) listImages(limit int, userID uint, all bool, cursor *imageCursor, 
 	}
 	if filter.Storage != "" {
 		switch filter.Storage {
-		case "mirror", "local", "s3":
+		case "mirror", "local", "s3", "webdav":
 			query += " AND (" + effectiveStorageModeSQL() + ") = ?"
 			args = append(args, filter.Storage)
 		}
@@ -956,8 +960,9 @@ func effectiveStorageModeSQL() string {
 	      (SELECT COUNT(*) FROM storage_target_replicas r WHERE r.image_id=images.id AND r.status='ready') > 1 THEN 'mirror'
 	 WHEN EXISTS (SELECT 1 FROM image_replicas r WHERE r.image_id=images.id AND r.storage_mode='local' AND r.status='ready')
 	   OR EXISTS (SELECT 1 FROM storage_target_replicas r JOIN storage_targets t ON t.id=r.target_id WHERE r.image_id=images.id AND r.status='ready' AND t.provider='local') THEN 'local'
+	 WHEN EXISTS (SELECT 1 FROM storage_target_replicas r JOIN storage_targets t ON t.id=r.target_id WHERE r.image_id=images.id AND r.status='ready' AND t.provider='webdav') THEN 'webdav'
 	 WHEN EXISTS (SELECT 1 FROM image_replicas r WHERE r.image_id=images.id AND r.storage_mode='s3' AND r.status='ready')
-	   OR EXISTS (SELECT 1 FROM storage_target_replicas r JOIN storage_targets t ON t.id=r.target_id WHERE r.image_id=images.id AND r.status='ready' AND t.provider<>'local') THEN 's3'
+	   OR EXISTS (SELECT 1 FROM storage_target_replicas r JOIN storage_targets t ON t.id=r.target_id WHERE r.image_id=images.id AND r.status='ready' AND t.provider NOT IN ('local','webdav')) THEN 's3'
 	 ELSE images.storage_mode END`
 }
 

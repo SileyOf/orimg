@@ -45,16 +45,11 @@ func (a *App) MailTemplates(w http.ResponseWriter, r *http.Request) {
 		utils.WriteError(w, 500, "读取邮件设置失败")
 		return
 	}
-	m := mailer.Message{To: "preview@example.test", Body: "我们收到了您的账号验证请求。请点击下方按钮，安全地完成操作。", ActionURL: c.BaseURL + "/account-action#preview", ValidFor: "24 小时"}
+	m := mailer.Message{To: "preview@example.test", Body: mailer.PurposeMessage(kind), ActionURL: c.BaseURL + "/account-action#preview", ValidFor: "24 小时"}
 	if kind == "reset" {
 		m.ValidFor = "20 分钟"
 	}
-	if kind == "test" {
-		m.Body = "这是一封由管理员主动发送的测试邮件。收到此邮件后可以开启正式发信。"
-		m.ActionURL = ""
-	}
-	if kind == "security" {
-		m.Body = "您的账号安全信息已更新。原会话和 API Token 已撤销。\n如果这不是您的操作，请立即联系站点管理员。"
+	if kind == "test" || kind == "security" {
 		m.ActionURL = ""
 	}
 	m = mailer.Render(c, kind, t, m, utils.GetSetting(a.DB, "default_accent_color", "lime"))

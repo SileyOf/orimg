@@ -100,3 +100,48 @@ func TestTemplateValidationAndUnsafeLink(t *testing.T) {
 		t.Fatal("logo does not follow accent")
 	}
 }
+
+func TestRenderLayoutDetails(t *testing.T) {
+	c := Config{Name: "Origin", BaseURL: "https://img.example.test/"}
+	tpl := DefaultTemplate("reset")
+	tpl.Body = "{{message}}\n\n访问 {{site_url}}，链接 {{valid_for}}内有效。\n第二行"
+	m := Render(c, "reset", tpl, Message{ActionURL: "https://img.example.test/account-action#reset:t", ValidFor: "20 分钟"}, "blue")
+	for _, want := range []string{
+		`bgcolor="#64aaf5"`,                          // accent-coloured button
+		`<meta name="color-scheme" content="light">`, // no forced dark inversion
+		"<title>Origin · 重设密码</title>",
+		"mso-hide:all", // preheader
+		"https://img.example.test，链接 20 分钟内有效。<br>第二行", // variables and line breaks
+		`<a href="https://img.example.test" style`,     // footer link to the site
+	} {
+		if !strings.Contains(m.HTML, want) {
+			t.Fatalf("missing %q in HTML", want)
+		}
+	}
+	if !strings.Contains(m.HTML, "重设账号密码的请求") {
+		t.Fatal("purpose message not used for an empty body")
+	}
+	if strings.Contains(m.HTML, "white-space:pre-wrap") {
+		t.Fatal("line breaks must not depend on pre-wrap")
+	}
+	if !strings.HasSuffix(m.Body, "— Origin\nhttps://img.example.test") || !strings.Contains(m.Body, "#reset:t") {
+		t.Fatalf("plain text body: %q", m.Body)
+	}
+	if strings.Contains(Render(Config{Name: "x", BaseURL: "javascript:alert(1)"}, "test", DefaultTemplate("test"), Message{}, "lime").HTML, "javascript:") {
+		t.Fatal("unsafe site URL rendered")
+	}
+}
+
+func TestPurposeMessagesDiffer(t *testing.T) {
+	seen := map[string]string{}
+	for kind := range Titles {
+		msg := PurposeMessage(kind)
+		if msg == "" {
+			t.Fatalf("empty message for %s", kind)
+		}
+		if other, dup := seen[msg]; dup {
+			t.Fatalf("%s and %s share a message", kind, other)
+		}
+		seen[msg] = kind
+	}
+}

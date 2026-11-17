@@ -25,6 +25,9 @@ func writeDatabaseArchive(ctx context.Context, opts Options, mode, key string, b
 	if mode == "s3" {
 		return NewS3Client(opts.S3).PutObjectReader(ctx, key, "application/gzip", size, body, checksum)
 	}
+	if mode == "webdav" {
+		return NewWebDAVClient(opts.WebDAV).PutReader(ctx, key, "application/gzip", size, body)
+	}
 	if mode != "local" {
 		return errors.New("invalid backup storage mode")
 	}

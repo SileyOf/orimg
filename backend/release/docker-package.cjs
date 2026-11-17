@@ -24,7 +24,7 @@ const { execFileSync } = require('node:child_process');
       await fs.mkdir(dest);
       for (const [from, to] of [['docker/compose.yaml','compose.yaml'], ['docker/compose.mysql.yaml','compose.mysql.yaml'],
         ['docker/compose.legacy.yaml','compose.legacy.yaml'], ['docker/migrate-check.sh','migrate-check.sh'], ['docker/.env.example','.env.example'],
-        ['docs/DOCKER.md','README.md'], ['docs/MIGRATE_FROM_BINARY.md','MIGRATE_FROM_BINARY.md']]) {
+        ['docs/DOCKER.md','README.md'], ['docs/MIGRATION.md','MIGRATION.md']]) {
         await fs.copyFile(path.join(root, from), path.join(dest, to));
       }
       execFileSync('docker', ['image', 'save', '--platform', `linux/${arch}`, '-o', path.join(dest, 'origin-image.tar'), image], { stdio: 'inherit' });

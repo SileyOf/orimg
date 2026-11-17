@@ -1,25 +1,24 @@
-# Origin v0.5.2 部署入口
+# Origin 部署入口
 
-当前版本为 v0.5.2，数据库结构版本为 9（v0.4.7 起未变）。源码包不包含可执行程序、Docker 镜像或任何站点运行数据。
+当前版本 v0.6.0，数据库结构版本 9（v0.4.7 起未变）。
 
-## 选择部署方式
-
-| 场景 | 指南 |
+| 我想… | 看这里 |
 | --- | --- |
-| 首次使用 Docker / Compose | [Docker 部署](docs/DOCKER.md) |
-| 二进制旧站迁到 Docker | [迁移指南](docs/MIGRATE_FROM_BINARY.md) |
-| 首次使用 Go 程序、初始化数据库与管理员 | [安装与旧库接入](docs/INSTALLATION.md) |
-| 从 v0.5.x 升级 | [v0.5.2](docs/UPGRADE_v0.5.2.md)、[v0.5.1](docs/UPGRADE_v0.5.1.md) 升级说明 |
+| 了解准备工作、选择部署方式、完成安装向导 | [安装指南](docs/INSTALLATION.md) |
+| 用 Docker Compose 部署或升级 | [Docker 部署](docs/DOCKER.md) |
+| 用二进制部署（含宝塔 / systemd）或升级 | [二进制部署](docs/BINARY.md) |
+| 从源码编译 | [开发与编译](docs/DEVELOPMENT.md#编译) |
+| 二进制 ⇄ Docker 互相迁移、换服务器 | [迁移指南](docs/MIGRATION.md) |
+| 配置本地 / S3 / WebDAV 存储与备份 | [存储说明](docs/STORAGE.md) |
+| 查看某个版本的升级注意事项 | [Changelog](../CHANGELOG.md)、`docs/UPGRADE_v*.md` |
 | v0.4.7 密钥检查导致启动失败 | [v0.4.8 兼容修复](docs/UPGRADE_v0.4.8.md) |
-| 版本差异与历史变更 | [Changelog](../CHANGELOG.md) |
-| 编译、测试及源码打包 | [开发指南](docs/DEVELOPMENT.md) |
 
 ## 升级前必须确认
 
 - 备份数据库、原 `.env` / 安装文件、独立签名密钥、图片及自定义资源。
 - 不要替换旧 `JWT_SECRET`；它仍用于解密存储和邮件凭据。新签名密钥不能替代它。
 - 先停止旧实例与后台工作器，切勿同时运行两套会发信、同步或清理的实例。
-- 容器迁入不是覆盖程序文件。核对数据库地址、原存储绝对路径、挂载与 UID/GID 权限。
+- 换部署方式不是覆盖程序文件。核对数据库地址、原存储绝对路径、挂载与 UID/GID 权限，见 [迁移指南](docs/MIGRATION.md)。
 - `DISABLE_BACKGROUND_WORK=true` 仅暂停自动任务，不是数据库只读模式；手动 API 仍可写入。
 - `/api/health` 是进程存活检查；`/api/ready` 才反映安装与数据库就绪情况。
 

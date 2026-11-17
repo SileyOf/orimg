@@ -387,7 +387,7 @@
       this.dialog.querySelector(".ag-original").href = imageURL(im);
       this.dialog.querySelector(".ag-url").value = imageURL(im);
       this.dialog.querySelector("select").value = this.format;
-      const rows = [["文件名", this.viewImage.alt], ["尺寸", im.width && im.height ? `${im.width} × ${im.height}` : "未知"], ["格式", `${im.mime_type || "未知"}${im.is_animated ? " · 动图" : ""}`], ["大小", bytes(im.size)], ["存储", ({ local: "Local", s3: "S3", mirror: "Mirror · 双副本" })[im.storage_mode] || im.storage_mode], ["上传时间", im.created_at ? new Date(im.created_at).toLocaleString("zh-CN", { hour12: false }) : "未知"]];
+      const rows = [["文件名", this.viewImage.alt], ["尺寸", im.width && im.height ? `${im.width} × ${im.height}` : "未知"], ["格式", `${im.mime_type || "未知"}${im.is_animated ? " · 动图" : ""}`], ["大小", bytes(im.size)], ["存储", ({ local: "Local", s3: "S3", webdav: "WebDAV", mirror: "Mirror · 双副本" })[im.storage_mode] || im.storage_mode], ["上传时间", im.created_at ? new Date(im.created_at).toLocaleString("zh-CN", { hour12: false }) : "未知"]];
       if (im.username) rows.push(["上传者", im.username]);
       if (im.expires_at) rows.push(["过期时间", new Date(im.expires_at).toLocaleString("zh-CN")]);
       this.dialog.querySelector("dl").innerHTML = rows.map(([label, value]) => `<div><dt>${escape(label)}</dt><dd>${escape(value)}</dd></div>`).join("");

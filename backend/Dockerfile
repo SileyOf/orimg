@@ -26,7 +26,7 @@ RUN /bin/bash /collect-runtime.sh
 
 FROM scratch
 LABEL org.opencontainers.image.title="Origin" \
-      org.opencontainers.image.version="0.5.2" \
+      org.opencontainers.image.version="0.6.0" \
       org.opencontainers.image.description="Origin self-hosted image hosting (Go + MySQL)" \
       org.opencontainers.image.source="https://github.com/SileyOf/orimg" \
       org.opencontainers.image.licenses="AGPL-3.0-only"

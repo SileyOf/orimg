@@ -35,8 +35,9 @@ type Options struct {
 	UploadDir string
 	CacheDir  string
 	ThumbDir  string
-	S3Prefix  string
+	S3Prefix  string // object prefix for S3 and WebDAV keys
 	S3        config.S3Config
+	WebDAV    WebDAVConfig
 }
 
 func (m *Manager) DefaultOptions() Options {
@@ -51,6 +52,25 @@ func (m *Manager) DefaultOptions() Options {
 
 func (m *Manager) S3Configured(opts Options) bool {
 	return NewS3Client(opts.S3).Configured()
+}
+
+// Configured reports whether a storage mode has enough settings to be used.
+func (m *Manager) Configured(mode string, opts Options) bool {
+	switch mode {
+	case "local":
+		return true
+	case "s3":
+		return m.S3Configured(opts)
+	case "webdav":
+		return NewWebDAVClient(opts.WebDAV).Configured()
+	default:
+		return false
+	}
+}
+
+// remoteKey builds the object key used by S3 and WebDAV for a new upload.
+func remoteKey(opts Options, publicName string) string {
+	return joinObjectKey(opts.S3Prefix, time.Now().Format("20060102"), publicName)
 }
 
 func (m *Manager) Save(ctx context.Context, opts Options, mode string, image *models.Image, header *multipart.FileHeader) error {
@@ -86,6 +106,13 @@ func (m *Manager) SaveReader(ctx context.Context, opts Options, mode string, ima
 	switch mode {
 	case "s3":
 		return m.saveS3Reader(ctx, opts, image, reader, size, checksum)
+	case "webdav":
+		key := remoteKey(opts, image.PublicName)
+		if err := NewWebDAVClient(opts.WebDAV).PutReader(ctx, key, image.MimeType, size, reader); err != nil {
+			return err
+		}
+		image.StorageKey = key
+		return nil
 	case "local", "mirror":
 		return m.saveLocalReader(opts, image, reader)
 	default:
@@ -100,6 +127,8 @@ func (m *Manager) ReadBytes(ctx context.Context, opts Options, mode, key string)
 		return os.ReadFile(m.LocalPath(opts, key))
 	case "s3":
 		return NewS3Client(opts.S3).GetObject(ctx, key)
+	case "webdav":
+		return NewWebDAVClient(opts.WebDAV).Get(ctx, key)
 	default:
 		return nil, errors.New("unsupported storage mode")
 	}
@@ -125,6 +154,14 @@ func (m *Manager) WriteReplica(ctx context.Context, opts Options, mode, key, con
 			return "", err
 		}
 		return key, nil
+	case "webdav":
+		if key == "" {
+			return "", errors.New("webdav storage key is required")
+		}
+		if err := NewWebDAVClient(opts.WebDAV).PutReader(ctx, key, contentType, int64(len(body)), bytes.NewReader(body)); err != nil {
+			return "", err
+		}
+		return key, nil
 	default:
 		return "", errors.New("unsupported storage mode")
 	}
@@ -141,6 +178,8 @@ func (m *Manager) DeleteReplica(ctx context.Context, opts Options, mode, key str
 		return err
 	case "s3":
 		return NewS3Client(opts.S3).DeleteObject(ctx, key)
+	case "webdav":
+		return NewWebDAVClient(opts.WebDAV).Delete(ctx, key)
 	default:
 		return errors.New("unsupported storage mode")
 	}
@@ -152,7 +191,7 @@ func (m *Manager) ReplicaKey(opts Options, mode string, createdAt time.Time, pub
 	if createdAt.IsZero() {
 		day = time.Now().Format("20060102")
 	}
-	if mode == "s3" {
+	if mode == "s3" || mode == "webdav" {
 		return joinObjectKey(opts.S3Prefix, day, filepath.Base(publicName))
 	}
 	return filepath.Join(day, filepath.Base(publicName))
@@ -204,6 +243,10 @@ func (m *Manager) Delete(ctx context.Context, opts Options, image *models.Image)
 	if image.StorageMode == "s3" {
 		_ = os.Remove(m.CachePath(opts, image.PublicName))
 		return NewS3Client(opts.S3).DeleteObject(ctx, image.StorageKey)
+	}
+	if image.StorageMode == "webdav" {
+		_ = os.Remove(m.CachePath(opts, image.PublicName))
+		return NewWebDAVClient(opts.WebDAV).Delete(ctx, image.StorageKey)
 	}
 	return os.Remove(m.LocalPath(opts, image.StorageKey))
 }

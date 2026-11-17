@@ -1,0 +1,39 @@
+# systemd unit for the Origin binary. Install with:
+#   sudo cp origin.service /etc/systemd/system/ && sudo systemctl daemon-reload
+#   sudo systemctl enable --now origin
+# Adjust WorkingDirectory/User if you installed elsewhere. The program reads
+# .env, static/ and data/ relative to WorkingDirectory.
+[Unit]
+Description=Origin image hosting
+After=network-online.target mysqld.service mysql.service mariadb.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=origin
+Group=origin
+WorkingDirectory=/opt/origin
+ExecStart=/opt/origin/zhuapic
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=40
+KillSignal=SIGTERM
+UMask=0027
+
+# Hardening: only the data directory is writable. Add one ReadWritePaths=
+# line for every extra storage directory (NAS mount, backup folder, ...).
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/origin/data
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+[Install]
+WantedBy=multi-user.target

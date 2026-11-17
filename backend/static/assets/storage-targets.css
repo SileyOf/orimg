@@ -167,3 +167,4 @@ html:root .ui-v4 .group-dialog .group-editor .policy-card { padding:0; display:f
 html:root .ui-v4 .group-dialog .policy-actions { flex:none; display:flex; flex-direction:row; justify-content:space-between; gap:12px; margin:0; padding:16px 24px; border-top:1px solid var(--line); }
 html:root .ui-v4 .group-dialog .policy-actions button { white-space:nowrap; width:auto; }
 @media(max-width:600px) { .group-dialog .policy-fields { grid-template-columns:repeat(2,minmax(0,1fr)); } .group-dialog > header,.group-dialog .policy-content,html:root .ui-v4 .group-dialog .policy-actions { padding:18px; } }
+#targetEditor [hidden] { display: none !important; }
